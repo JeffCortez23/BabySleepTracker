@@ -1,13 +1,14 @@
 package com.elyefris.khalessleeptracker.data.repository
 
 import android.util.Log
+import com.elyefris.khalessleeptracker.data.model.DiaperChange
+import com.elyefris.khalessleeptracker.data.model.DiaperType
 import com.elyefris.khalessleeptracker.data.model.Interruption
 import com.elyefris.khalessleeptracker.data.model.SleepSession
 import com.elyefris.khalessleeptracker.data.model.SleepStatus
 import com.elyefris.khalessleeptracker.data.model.SleepType
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
-import com.google.firebase.firestore.snapshots
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -17,8 +18,8 @@ import java.util.Date
 class FirebaseSleepRepository : SleepRepository {
 
     private val db = FirebaseFirestore.getInstance()
-    // Asegúrate de usar el mismo nombre de colección siempre
     private val sessionsCollection = db.collection("sleep_sessions")
+    private val diapersCollection = db.collection("diaper_changes")
 
     // 1. Escuchar la sesión activa (la más reciente)
     override fun getLastSession(): Flow<SleepSession?> = callbackFlow {
@@ -44,11 +45,11 @@ class FirebaseSleepRepository : SleepRepository {
         awaitClose { registration.remove() }
     }
 
-    // 2. Traer el historial (últimas 20 sesiones)
+    // 2. Traer TODO el historial (sin límite)
     override fun getHistory(): Flow<List<SleepSession>> = callbackFlow {
         val query = sessionsCollection
             .orderBy("startTime", Query.Direction.DESCENDING)
-            .limit(20)
+        // SIN LÍMITE - traer todos los registros
 
         val registration = query.addSnapshotListener { snapshot, error ->
             if (error != null) {
@@ -84,7 +85,6 @@ class FirebaseSleepRepository : SleepRepository {
             .get()
             .await()
 
-        // Revisamos si también hay alguna marcada como "DESPIERTO" (interrupción activa)
         val awakeSnapshot = sessionsCollection
             .whereEqualTo("status", "DESPIERTO")
             .get()
@@ -93,7 +93,7 @@ class FirebaseSleepRepository : SleepRepository {
         val docs = activeSnapshot.documents + awakeSnapshot.documents
 
         if (docs.isNotEmpty()) {
-            val doc = docs[0] // Tomamos la primera que encontremos activa
+            val doc = docs[0]
             doc.reference.update(
                 mapOf(
                     "status" to SleepStatus.FINALIZADO,
@@ -150,5 +150,45 @@ class FirebaseSleepRepository : SleepRepository {
                 )
             ).await()
         }
+    }
+
+    // ============ FUNCIONES DE PAÑALES ============
+
+    override fun getDiaperChanges(): Flow<List<DiaperChange>> = callbackFlow {
+        val query = diapersCollection
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+
+        val registration = query.addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                Log.e("FirebaseRepo", "Error escuchando cambios de pañal", error)
+                close(error)
+                return@addSnapshotListener
+            }
+
+            if (snapshot != null) {
+                val changes = snapshot.toObjects(DiaperChange::class.java)
+                trySend(changes)
+            }
+        }
+        awaitClose { registration.remove() }
+    }
+
+    override suspend fun addDiaperChange(type: DiaperType, notes: String) {
+        val change = DiaperChange(
+            timestamp = Date(),
+            type = type,
+            notes = notes
+        )
+        diapersCollection.add(change).await()
+    }
+
+    override suspend fun deleteDiaperChange(diaperId: String) {
+        diapersCollection.document(diaperId).delete().await()
+    }
+
+    // ============ FUNCIONES DE ELIMINACIÓN ============
+
+    override suspend fun deleteSession(sessionId: String) {
+        sessionsCollection.document(sessionId).delete().await()
     }
 }
