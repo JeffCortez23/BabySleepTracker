@@ -14,6 +14,7 @@ interface SleepRepository {
     suspend fun backToSleep()
     suspend fun finishSleep()
     suspend fun deleteSession(sessionId: String)
+    suspend fun addManualSession(session: SleepSession)
 
     // Funciones de pañales
     fun getDiaperChanges(): Flow<List<DiaperChange>>

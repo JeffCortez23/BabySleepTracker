@@ -28,6 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,6 +47,7 @@ import com.elyefris.khalessleeptracker.utils.formatSleepDuration
 import com.elyefris.khalessleeptracker.viewmodel.SleepViewModel
 import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -99,6 +101,8 @@ fun MainScreen(viewModel: SleepViewModel) {
     var selectedDate by remember { mutableStateOf<String?>(null) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     var sessionToDelete by remember { mutableStateOf<SleepSession?>(null) }
+    var showManualEntry by remember { mutableStateOf(false) }
+    var showDiaperHistory by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -120,18 +124,36 @@ fun MainScreen(viewModel: SleepViewModel) {
                     .padding(horizontal = 24.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                SmallFloatingActionButton(
-                    onClick = { showDiaperDialog = true },
-                    containerColor = if (isDark) Color(0xFF2E2E2E) else Color.White.copy(alpha = 0.9f)
-                ) {
-                    Text("🧷", fontSize = 20.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SmallFloatingActionButton(
+                        onClick = { showDiaperDialog = true },
+                        containerColor = if (isDark) Color(0xFF2E2E2E) else Color.White.copy(alpha = 0.9f)
+                    ) {
+                        Text("🧷", fontSize = 20.sp)
+                    }
+
+                    SmallFloatingActionButton(
+                        onClick = { showDiaperHistory = true },
+                        containerColor = if (isDark) Color(0xFF2E2E2E) else Color.White.copy(alpha = 0.9f)
+                    ) {
+                        Text("📋", fontSize = 20.sp)
+                    }
                 }
 
-                SmallFloatingActionButton(
-                    onClick = { showAchievements = true },
-                    containerColor = if (isDark) Color(0xFF2E2E2E) else Color.White.copy(alpha = 0.9f)
-                ) {
-                    Icon(imageVector = Icons.Default.Star, contentDescription = "Logros", tint = Color(0xFFFFD700))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SmallFloatingActionButton(
+                        onClick = { showManualEntry = true },
+                        containerColor = if (isDark) Color(0xFF2E2E2E) else Color.White.copy(alpha = 0.9f)
+                    ) {
+                        Text("✏️", fontSize = 20.sp)
+                    }
+
+                    SmallFloatingActionButton(
+                        onClick = { showAchievements = true },
+                        containerColor = if (isDark) Color(0xFF2E2E2E) else Color.White.copy(alpha = 0.9f)
+                    ) {
+                        Icon(imageVector = Icons.Default.Star, contentDescription = "Logros", tint = Color(0xFFFFD700))
+                    }
                 }
             }
 
@@ -340,6 +362,33 @@ fun MainScreen(viewModel: SleepViewModel) {
                 onDismiss = {
                     showDeleteConfirmation = false
                     sessionToDelete = null
+                }
+            )
+        }
+
+        if (showManualEntry) {
+            ManualEntryDialog(
+                isDark = isDark,
+                cardBg = cardBackgroundColor,
+                textPrimary = primaryTextColor,
+                onDismiss = { showManualEntry = false },
+                onSave = { session ->
+                    viewModel.addManualSession(session)
+                    showManualEntry = false
+                }
+            )
+        }
+
+        if (showDiaperHistory) {
+            DiaperHistoryDialog(
+                diaperChanges = state.diaperChanges,
+                isDark = isDark,
+                cardBg = cardBackgroundColor,
+                textPrimary = primaryTextColor,
+                secondaryTextColor = secondaryTextColor,
+                onDismiss = { showDiaperHistory = false },
+                onDelete = { diaperId ->
+                    viewModel.deleteDiaperChange(diaperId)
                 }
             )
         }
@@ -965,6 +1014,601 @@ fun DeleteConfirmationDialog(
                 }
             }
         }
+    }
+}
+
+// ==========================================
+// DIÁLOGO DE HISTORIAL DE PAÑALES
+// ==========================================
+
+@Composable
+fun DiaperHistoryDialog(
+    diaperChanges: List<DiaperChange>,
+    isDark: Boolean,
+    cardBg: Color,
+    textPrimary: Color,
+    secondaryTextColor: Color,
+    onDismiss: () -> Unit,
+    onDelete: (String) -> Unit
+) {
+    var changeToDelete by remember { mutableStateOf<DiaperChange?>(null) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.85f)
+                .clip(RoundedCornerShape(28.dp))
+                .background(cardBg)
+                .border(3.dp, Brush.linearGradient(listOf(PastelBlue, PastelPink)), RoundedCornerShape(28.dp))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    "📋 Historial de Pañales 🧷",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = textPrimary
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    "${diaperChanges.size} cambio${if(diaperChanges.size != 1) "s" else ""} registrado${if(diaperChanges.size != 1) "s" else ""}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = secondaryTextColor
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (diaperChanges.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("🧷", fontSize = 64.sp, color = Color.Gray.copy(alpha = 0.5f))
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                "No hay registros de pañales aún",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = secondaryTextColor,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(diaperChanges) { change ->
+                            DiaperChangeItem(
+                                change = change,
+                                isDark = isDark,
+                                textPrimary = textPrimary,
+                                secondaryTextColor = secondaryTextColor,
+                                onDelete = {
+                                    changeToDelete = change
+                                    showDeleteConfirm = true
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = PastelPurple),
+                    shape = RoundedCornerShape(50),
+                    modifier = Modifier.fillMaxWidth().height(50.dp)
+                ) {
+                    Text("Cerrar", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                }
+            }
+        }
+    }
+
+    // Confirmación de eliminación
+    if (showDeleteConfirm && changeToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("⚠️ Eliminar Registro") },
+            text = {
+                Column {
+                    Text("¿Eliminar este cambio de pañal?")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    val dateFormat = SimpleDateFormat("EEE dd MMM, hh:mm a", Locale("es", "ES"))
+                    Text(
+                        dateFormat.format(changeToDelete!!.timestamp).replaceFirstChar { it.uppercase() },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = secondaryTextColor
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete(changeToDelete!!.id)
+                        showDeleteConfirm = false
+                        changeToDelete = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = Color.Red)
+                ) {
+                    Text("Eliminar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun DiaperChangeItem(
+    change: DiaperChange,
+    isDark: Boolean,
+    textPrimary: Color,
+    secondaryTextColor: Color,
+    onDelete: () -> Unit
+) {
+    val typeEmoji = when (change.type) {
+        DiaperType.ORINA -> "💧"
+        DiaperType.POPO -> "💩"
+        DiaperType.AMBOS -> "💧💩"
+    }
+
+    val typeText = when (change.type) {
+        DiaperType.ORINA -> "Orina"
+        DiaperType.POPO -> "Popó"
+        DiaperType.AMBOS -> "Orina y Popó"
+    }
+
+    LiquidCard(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(text = typeEmoji, fontSize = 32.sp)
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = typeText,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = textPrimary
+                    )
+                    val dateFormat = SimpleDateFormat("EEE dd MMM, hh:mm a", Locale("es", "ES"))
+                    Text(
+                        text = dateFormat.format(change.timestamp).replaceFirstChar { it.uppercase() },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = secondaryTextColor
+                    )
+                    if (change.notes.isNotBlank()) {
+                        Text(
+                            text = change.notes,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = secondaryTextColor.copy(alpha = 0.7f),
+                            fontStyle = FontStyle.Italic
+                        )
+                    }
+                }
+            }
+
+            IconButton(onClick = onDelete) {
+                Text("🗑️", fontSize = 20.sp)
+            }
+        }
+    }
+}
+
+// ==========================================
+// DIÁLOGO DE ENTRADA MANUAL
+// ==========================================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ManualEntryDialog(
+    isDark: Boolean,
+    cardBg: Color,
+    textPrimary: Color,
+    onDismiss: () -> Unit,
+    onSave: (SleepSession) -> Unit
+) {
+    var selectedType by remember { mutableStateOf(SleepType.NOCHE) }
+
+    // Calendars para manejo de fechas
+    val startCalendar = remember { Calendar.getInstance().apply { add(Calendar.DAY_OF_MONTH, -1) } }
+    val endCalendar = remember { Calendar.getInstance() }
+
+    var startDate by remember { mutableStateOf(startCalendar.time) }
+    var endDate by remember { mutableStateOf(endCalendar.time) }
+
+    var showStartDatePicker by remember { mutableStateOf(false) }
+    var showStartTimePicker by remember { mutableStateOf(false) }
+    var showEndDatePicker by remember { mutableStateOf(false) }
+    var showEndTimePicker by remember { mutableStateOf(false) }
+
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    val dateFormat = SimpleDateFormat("EEE dd MMM yyyy", Locale("es", "ES"))
+    val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
+
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(28.dp))
+                .background(cardBg)
+                .border(3.dp, Brush.linearGradient(listOf(PastelBlue, PastelPurple)), RoundedCornerShape(28.dp))
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(24.dp)
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    "✏️ Registro Manual ✏️",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = textPrimary
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    "Para agregar sesiones olvidadas o que no se pudieron registrar por batería baja o móvil extraviado",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = textPrimary.copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Selector de Tipo
+                Text(
+                    "Tipo de Sueño",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = textPrimary,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Button(
+                        onClick = { selectedType = SleepType.SIESTA },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (selectedType == SleepType.SIESTA) PastelCream else Color.Gray.copy(alpha = 0.3f)
+                        ),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("☀️", fontSize = 24.sp)
+                            Text("Siesta", color = if (selectedType == SleepType.SIESTA) Color.DarkGray else Color.Gray)
+                        }
+                    }
+
+                    Button(
+                        onClick = { selectedType = SleepType.NOCHE },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (selectedType == SleepType.NOCHE) PastelPurple else Color.Gray.copy(alpha = 0.3f)
+                        ),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("🌙", fontSize = 24.sp)
+                            Text("Noche", color = Color.White)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // INICIO
+                Text(
+                    "Hora de Inicio",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = textPrimary,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { showStartDatePicker = true },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("📅", fontSize = 20.sp)
+                            Text(
+                                dateFormat.format(startDate).replaceFirstChar { it.uppercase() },
+                                fontSize = 12.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = { showStartTimePicker = true },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("🕐", fontSize = 20.sp)
+                            Text(timeFormat.format(startDate), fontSize = 12.sp)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // FIN
+                Text(
+                    "Hora de Fin",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = textPrimary,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { showEndDatePicker = true },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("📅", fontSize = 20.sp)
+                            Text(
+                                dateFormat.format(endDate).replaceFirstChar { it.uppercase() },
+                                fontSize = 12.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = { showEndTimePicker = true },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("🕐", fontSize = 20.sp)
+                            Text(timeFormat.format(endDate), fontSize = 12.sp)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Mostrar duración calculada
+                if (endDate.time > startDate.time) {
+                    val diffMillis = endDate.time - startDate.time
+                    val hours = TimeUnit.MILLISECONDS.toHours(diffMillis)
+                    val minutes = TimeUnit.MILLISECONDS.toMinutes(diffMillis) % 60
+
+                    LiquidCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("Duración Total", style = MaterialTheme.typography.labelMedium, color = textPrimary.copy(alpha = 0.7f))
+                            Text(
+                                "${hours}h ${minutes}m",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = PastelPurple
+                            )
+                        }
+                    }
+                }
+
+                // Error message
+                errorMessage?.let {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Red,
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Botones
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.buttonColors(containerColor = if (isDark) Color.DarkGray else Color.LightGray),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Cancelar", color = if (isDark) Color.White else Color.Black)
+                    }
+
+                    Button(
+                        onClick = {
+                            if (endDate.time <= startDate.time) {
+                                errorMessage = "La hora de fin debe ser posterior a la de inicio"
+                            } else {
+                                val session = SleepSession(
+                                    startTime = startDate,
+                                    endTime = endDate,
+                                    type = selectedType,
+                                    status = SleepStatus.FINALIZADO,
+                                    interruptions = emptyList()
+                                )
+                                onSave(session)
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = PastelPurple),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Guardar", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+
+    // Date & Time Pickers
+    if (showStartDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = startDate.time
+        )
+        DatePickerDialog(
+            onDismissRequest = { showStartDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val cal = Calendar.getInstance()
+                        cal.timeInMillis = millis
+                        val currentCal = Calendar.getInstance()
+                        currentCal.time = startDate
+                        cal.set(Calendar.HOUR_OF_DAY, currentCal.get(Calendar.HOUR_OF_DAY))
+                        cal.set(Calendar.MINUTE, currentCal.get(Calendar.MINUTE))
+                        startDate = cal.time
+                    }
+                    showStartDatePicker = false
+                }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStartDatePicker = false }) {
+                    Text("Cancelar")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    if (showStartTimePicker) {
+        val cal = Calendar.getInstance()
+        cal.time = startDate
+        val timePickerState = rememberTimePickerState(
+            initialHour = cal.get(Calendar.HOUR_OF_DAY),
+            initialMinute = cal.get(Calendar.MINUTE)
+        )
+
+        AlertDialog(
+            onDismissRequest = { showStartTimePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val newCal = Calendar.getInstance()
+                    newCal.time = startDate
+                    newCal.set(Calendar.HOUR_OF_DAY, timePickerState.hour)
+                    newCal.set(Calendar.MINUTE, timePickerState.minute)
+                    startDate = newCal.time
+                    showStartTimePicker = false
+                }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStartTimePicker = false }) {
+                    Text("Cancelar")
+                }
+            },
+            text = {
+                TimePicker(state = timePickerState)
+            }
+        )
+    }
+
+    if (showEndDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = endDate.time
+        )
+        DatePickerDialog(
+            onDismissRequest = { showEndDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val cal = Calendar.getInstance()
+                        cal.timeInMillis = millis
+                        val currentCal = Calendar.getInstance()
+                        currentCal.time = endDate
+                        cal.set(Calendar.HOUR_OF_DAY, currentCal.get(Calendar.HOUR_OF_DAY))
+                        cal.set(Calendar.MINUTE, currentCal.get(Calendar.MINUTE))
+                        endDate = cal.time
+                    }
+                    showEndDatePicker = false
+                }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEndDatePicker = false }) {
+                    Text("Cancelar")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    if (showEndTimePicker) {
+        val cal = Calendar.getInstance()
+        cal.time = endDate
+        val timePickerState = rememberTimePickerState(
+            initialHour = cal.get(Calendar.HOUR_OF_DAY),
+            initialMinute = cal.get(Calendar.MINUTE)
+        )
+
+        AlertDialog(
+            onDismissRequest = { showEndTimePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val newCal = Calendar.getInstance()
+                    newCal.time = endDate
+                    newCal.set(Calendar.HOUR_OF_DAY, timePickerState.hour)
+                    newCal.set(Calendar.MINUTE, timePickerState.minute)
+                    endDate = newCal.time
+                    showEndTimePicker = false
+                }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEndTimePicker = false }) {
+                    Text("Cancelar")
+                }
+            },
+            text = {
+                TimePicker(state = timePickerState)
+            }
+        )
     }
 }
 

@@ -56,6 +56,7 @@ class SleepViewModel(
     fun backToSleep() = viewModelScope.launch { repository.backToSleep() }
     fun finishSleep() = viewModelScope.launch { repository.finishSleep() }
     fun deleteSession(sessionId: String) = viewModelScope.launch { repository.deleteSession(sessionId) }
+    fun addManualSession(session: SleepSession) = viewModelScope.launch { repository.addManualSession(session) }
 
     // --- Funciones de pañales ---
     fun addDiaperChange(type: DiaperType, notes: String = "") = viewModelScope.launch {

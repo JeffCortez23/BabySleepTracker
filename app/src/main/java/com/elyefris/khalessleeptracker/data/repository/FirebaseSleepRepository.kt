@@ -191,4 +191,14 @@ class FirebaseSleepRepository : SleepRepository {
     override suspend fun deleteSession(sessionId: String) {
         sessionsCollection.document(sessionId).delete().await()
     }
+
+    // ============ FUNCIONES DE ENTRADA MANUAL ============
+
+    override suspend fun addManualSession(session: SleepSession) {
+        // Crear sesión ya finalizada con los datos proporcionados
+        val manualSession = session.copy(
+            status = SleepStatus.FINALIZADO
+        )
+        sessionsCollection.add(manualSession).await()
+    }
 }
