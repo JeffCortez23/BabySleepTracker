@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "97537218764",
+    "project_id": "khale-s-sleep-tracker",
+    "storage_bucket": "khale-s-sleep-tracker.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:97537218764:android:4d3a33d4a327c0af004a69",
+        "android_client_info": {
+          "package_name": "com.elyefris.khalessleeptracker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBh5W-lDaJK8WMnDJNmgXQTTmGjyEsSW0I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
