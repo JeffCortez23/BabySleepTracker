@@ -173,9 +173,9 @@ class FirebaseSleepRepository : SleepRepository {
         awaitClose { registration.remove() }
     }
 
-    override suspend fun addDiaperChange(type: DiaperType, notes: String) {
+    override suspend fun addDiaperChange(type: DiaperType, notes: String, timestamp: Date) {
         val change = DiaperChange(
-            timestamp = Date(),
+            timestamp = timestamp, // Usamos la fecha que recibimos de la UI
             type = type,
             notes = notes
         )

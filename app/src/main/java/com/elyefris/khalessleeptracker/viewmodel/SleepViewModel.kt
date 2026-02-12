@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Date
 
 data class SleepUiState(
     val session: SleepSession? = null,
@@ -59,8 +60,8 @@ class SleepViewModel(
     fun addManualSession(session: SleepSession) = viewModelScope.launch { repository.addManualSession(session) }
 
     // --- Funciones de pañales ---
-    fun addDiaperChange(type: DiaperType, notes: String = "") = viewModelScope.launch {
-        repository.addDiaperChange(type, notes)
+    fun addDiaperChange(type: DiaperType, notes: String = "", timestamp: Date = Date()) = viewModelScope.launch {
+        repository.addDiaperChange(type, notes, timestamp)
     }
     fun deleteDiaperChange(diaperId: String) = viewModelScope.launch {
         repository.deleteDiaperChange(diaperId)

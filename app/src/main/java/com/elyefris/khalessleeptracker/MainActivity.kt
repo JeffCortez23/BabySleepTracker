@@ -342,8 +342,8 @@ fun MainScreen(viewModel: SleepViewModel) {
                 cardBg = cardBackgroundColor,
                 textPrimary = primaryTextColor,
                 onDismiss = { showDiaperDialog = false },
-                onAddDiaper = { type, notes ->
-                    viewModel.addDiaperChange(type, notes)
+                onAddDiaper = { type, notes, date -> // <--- Ahora recibimos 'date'
+                    viewModel.addDiaperChange(type, notes, date)
                     showDiaperDialog = false
                 }
             )
@@ -564,16 +564,25 @@ fun SessionsOfDayView(
 // DIÁLOGO DE PAÑALES
 // ==========================================
 
+@OptIn(ExperimentalMaterial3Api::class) // Necesario para los Pickers
 @Composable
 fun DiaperDialog(
     isDark: Boolean,
     cardBg: Color,
     textPrimary: Color,
     onDismiss: () -> Unit,
-    onAddDiaper: (DiaperType, String) -> Unit
+    onAddDiaper: (DiaperType, String, Date) -> Unit
 ) {
     var selectedType by remember { mutableStateOf<DiaperType?>(null) }
     var notes by remember { mutableStateOf("") }
+
+    // Estado para la fecha y hora (Por defecto: Ahora mismo)
+    var selectedDate by remember { mutableStateOf(Date()) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
+
+    val dateFormat = SimpleDateFormat("EEE dd MMM", Locale("es", "ES"))
+    val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
 
     Dialog(onDismissRequest = onDismiss) {
         Box(
@@ -588,9 +597,49 @@ fun DiaperDialog(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text("🧷 Cambio de Pañal 🧷", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = textPrimary)
+
+                // --- SELECTORES DE FECHA Y HORA ---
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Botón Fecha
+                    OutlinedButton(
+                        onClick = { showDatePicker = true },
+                        modifier = Modifier.weight(1f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, PastelBlue)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("📅", fontSize = 16.sp)
+                            Text(
+                                dateFormat.format(selectedDate).replaceFirstChar { it.uppercase() },
+                                fontSize = 12.sp,
+                                color = textPrimary
+                            )
+                        }
+                    }
+
+                    // Botón Hora
+                    OutlinedButton(
+                        onClick = { showTimePicker = true },
+                        modifier = Modifier.weight(1f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, PastelPink)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("🕐", fontSize = 16.sp)
+                            Text(
+                                timeFormat.format(selectedDate),
+                                fontSize = 12.sp,
+                                color = textPrimary
+                            )
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Opciones de tipo
+                // Opciones de tipo (Igual que antes)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
@@ -620,7 +669,7 @@ fun DiaperDialog(
                 Button(
                     onClick = {
                         selectedType?.let { type ->
-                            onAddDiaper(type, notes)
+                            onAddDiaper(type, notes, selectedDate)
                         }
                     },
                     enabled = selectedType != null,
@@ -637,6 +686,56 @@ fun DiaperDialog(
                 }
             }
         }
+    }
+
+    // --- LOGICA DE LOS POPUPS DE FECHA/HORA ---
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = selectedDate.time)
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val cal = Calendar.getInstance()
+                        cal.timeInMillis = millis
+                        val currentCal = Calendar.getInstance()
+                        currentCal.time = selectedDate
+                        // Mantener la hora que ya tenía seleccionada
+                        cal.set(Calendar.HOUR_OF_DAY, currentCal.get(Calendar.HOUR_OF_DAY))
+                        cal.set(Calendar.MINUTE, currentCal.get(Calendar.MINUTE))
+                        selectedDate = cal.time
+                    }
+                    showDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancelar") } }
+        ) { DatePicker(state = datePickerState) }
+    }
+
+    if (showTimePicker) {
+        val cal = Calendar.getInstance()
+        cal.time = selectedDate
+        val timePickerState = rememberTimePickerState(
+            initialHour = cal.get(Calendar.HOUR_OF_DAY),
+            initialMinute = cal.get(Calendar.MINUTE)
+        )
+
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val newCal = Calendar.getInstance()
+                    newCal.time = selectedDate
+                    newCal.set(Calendar.HOUR_OF_DAY, timePickerState.hour)
+                    newCal.set(Calendar.MINUTE, timePickerState.minute)
+                    selectedDate = newCal.time
+                    showTimePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = { TextButton(onClick = { showTimePicker = false }) { Text("Cancelar") } },
+            text = { TimePicker(state = timePickerState) }
+        )
     }
 }
 
