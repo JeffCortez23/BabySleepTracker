@@ -46,6 +46,8 @@ import com.elyefris.khalessleeptracker.ui.theme.*
 import com.elyefris.khalessleeptracker.utils.calculateRealSleepTime
 import com.elyefris.khalessleeptracker.utils.formatSleepDuration
 import com.elyefris.khalessleeptracker.viewmodel.SleepViewModel
+import com.elyefris.khalessleeptracker.data.model.Interruption
+import androidx.compose.material3.Checkbox
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -1322,10 +1324,6 @@ fun DiaperChangeItem(
     }
 }
 
-// ==========================================
-// DIÁLOGO DE ENTRADA MANUAL
-// ==========================================
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ManualEntryDialog(
@@ -1337,12 +1335,31 @@ fun ManualEntryDialog(
 ) {
     var selectedType by remember { mutableStateOf(SleepType.NOCHE) }
 
-    // Calendars para manejo de fechas
-    val startCalendar = remember { Calendar.getInstance().apply { add(Calendar.DAY_OF_MONTH, -1) } }
-    val endCalendar = remember { Calendar.getInstance() }
+    // Calendars para manejo de fechas - Inicializar con hora específica
+    val startCalendar = remember {
+        Calendar.getInstance().apply {
+            add(Calendar.DAY_OF_MONTH, -1)
+            set(Calendar.HOUR_OF_DAY, 21)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+    }
+    val endCalendar = remember {
+        Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 6)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+    }
 
     var startDate by remember { mutableStateOf(startCalendar.time) }
     var endDate by remember { mutableStateOf(endCalendar.time) }
+
+    // Estado para interrupciones
+    var interruptions by remember { mutableStateOf<List<Interruption>>(emptyList()) }
+    var showAddInterruption by remember { mutableStateOf(false) }
 
     var showStartDatePicker by remember { mutableStateOf(false) }
     var showStartTimePicker by remember { mutableStateOf(false) }
@@ -1358,12 +1375,14 @@ fun ManualEntryDialog(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .fillMaxHeight(0.9f)
                 .clip(RoundedCornerShape(28.dp))
                 .background(cardBg)
                 .border(3.dp, Brush.linearGradient(listOf(PastelBlue, PastelPurple)), RoundedCornerShape(28.dp))
         ) {
             Column(
                 modifier = Modifier
+                    .fillMaxSize()
                     .padding(24.dp)
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -1530,6 +1549,75 @@ fun ManualEntryDialog(
                     }
                 }
 
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // SECCIÓN DE INTERRUPCIONES
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Interrupciones (Opcional)",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = textPrimary
+                    )
+                    SmallFloatingActionButton(
+                        onClick = { showAddInterruption = true },
+                        containerColor = PastelBlue
+                    ) {
+                        Text("➕", fontSize = 16.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Lista de interrupciones
+                if (interruptions.isEmpty()) {
+                    Text(
+                        "Sin interrupciones",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = textPrimary.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    interruptions.forEachIndexed { index, interruption ->
+                        LiquidCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        "👀 Despertó: ${timeFormat.format(interruption.wokeUpAt)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = textPrimary
+                                    )
+                                    interruption.backToSleepAt?.let {
+                                        Text(
+                                            "💤 Volvió: ${timeFormat.format(it)}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = textPrimary.copy(alpha = 0.7f)
+                                        )
+                                    }
+                                }
+                                IconButton(
+                                    onClick = {
+                                        interruptions = interruptions.toMutableList().apply { removeAt(index) }
+                                    }
+                                ) {
+                                    Text("❌", fontSize = 16.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Error message
                 errorMessage?.let {
                     Spacer(modifier = Modifier.height(12.dp))
@@ -1561,14 +1649,25 @@ fun ManualEntryDialog(
                             if (endDate.time <= startDate.time) {
                                 errorMessage = "La hora de fin debe ser posterior a la de inicio"
                             } else {
-                                val session = SleepSession(
-                                    startTime = startDate,
-                                    endTime = endDate,
-                                    type = selectedType,
-                                    status = SleepStatus.FINALIZADO,
-                                    interruptions = emptyList()
-                                )
-                                onSave(session)
+                                // Validar que las interrupciones estén entre inicio y fin
+                                val validInterruptions = interruptions.all { inter ->
+                                    inter.wokeUpAt.time > startDate.time && inter.wokeUpAt.time < endDate.time &&
+                                            (inter.backToSleepAt == null ||
+                                                    (inter.backToSleepAt.time > inter.wokeUpAt.time && inter.backToSleepAt.time < endDate.time))
+                                }
+
+                                if (!validInterruptions) {
+                                    errorMessage = "Las interrupciones deben estar entre el inicio y fin del sueño"
+                                } else {
+                                    val session = SleepSession(
+                                        startTime = startDate,
+                                        endTime = endDate,
+                                        type = selectedType,
+                                        status = SleepStatus.FINALIZADO,
+                                        interruptions = interruptions
+                                    )
+                                    onSave(session)
+                                }
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = PastelPurple),
@@ -1581,7 +1680,7 @@ fun ManualEntryDialog(
         }
     }
 
-    // Date & Time Pickers
+    // Date & Time Pickers - FIX: Corregir manejo de zona horaria
     if (showStartDatePicker) {
         val datePickerState = rememberDatePickerState(
             initialSelectedDateMillis = startDate.time
@@ -1593,10 +1692,13 @@ fun ManualEntryDialog(
                     datePickerState.selectedDateMillis?.let { millis ->
                         val cal = Calendar.getInstance()
                         cal.timeInMillis = millis
+                        // Mantener la hora actual
                         val currentCal = Calendar.getInstance()
                         currentCal.time = startDate
                         cal.set(Calendar.HOUR_OF_DAY, currentCal.get(Calendar.HOUR_OF_DAY))
                         cal.set(Calendar.MINUTE, currentCal.get(Calendar.MINUTE))
+                        cal.set(Calendar.SECOND, 0)
+                        cal.set(Calendar.MILLISECOND, 0)
                         startDate = cal.time
                     }
                     showStartDatePicker = false
@@ -1630,6 +1732,8 @@ fun ManualEntryDialog(
                     newCal.time = startDate
                     newCal.set(Calendar.HOUR_OF_DAY, timePickerState.hour)
                     newCal.set(Calendar.MINUTE, timePickerState.minute)
+                    newCal.set(Calendar.SECOND, 0)
+                    newCal.set(Calendar.MILLISECOND, 0)
                     startDate = newCal.time
                     showStartTimePicker = false
                 }) {
@@ -1662,6 +1766,8 @@ fun ManualEntryDialog(
                         currentCal.time = endDate
                         cal.set(Calendar.HOUR_OF_DAY, currentCal.get(Calendar.HOUR_OF_DAY))
                         cal.set(Calendar.MINUTE, currentCal.get(Calendar.MINUTE))
+                        cal.set(Calendar.SECOND, 0)
+                        cal.set(Calendar.MILLISECOND, 0)
                         endDate = cal.time
                     }
                     showEndDatePicker = false
@@ -1695,6 +1801,8 @@ fun ManualEntryDialog(
                     newCal.time = endDate
                     newCal.set(Calendar.HOUR_OF_DAY, timePickerState.hour)
                     newCal.set(Calendar.MINUTE, timePickerState.minute)
+                    newCal.set(Calendar.SECOND, 0)
+                    newCal.set(Calendar.MILLISECOND, 0)
                     endDate = newCal.time
                     showEndTimePicker = false
                 }) {
@@ -1703,6 +1811,280 @@ fun ManualEntryDialog(
             },
             dismissButton = {
                 TextButton(onClick = { showEndTimePicker = false }) {
+                    Text("Cancelar")
+                }
+            },
+            text = {
+                TimePicker(state = timePickerState)
+            }
+        )
+    }
+
+    // Diálogo para agregar interrupción
+    if (showAddInterruption) {
+        AddInterruptionDialog(
+            isDark = isDark,
+            cardBg = cardBg,
+            textPrimary = textPrimary,
+            startDate = startDate,
+            endDate = endDate,
+            onDismiss = { showAddInterruption = false },
+            onAdd = { interruption ->
+                interruptions = interruptions + interruption
+                showAddInterruption = false
+            }
+        )
+    }
+}
+
+// ==========================================
+// DIÁLOGO PARA AGREGAR INTERRUPCIÓN
+// ==========================================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddInterruptionDialog(
+    isDark: Boolean,
+    cardBg: Color,
+    textPrimary: Color,
+    startDate: Date,
+    endDate: Date,
+    onDismiss: () -> Unit,
+    onAdd: (Interruption) -> Unit
+) {
+    // Por defecto, poner un tiempo intermedio
+    val defaultWokeUp = remember {
+        Calendar.getInstance().apply {
+            timeInMillis = startDate.time + ((endDate.time - startDate.time) / 3)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.time
+    }
+
+    val defaultBackToSleep = remember {
+        Calendar.getInstance().apply {
+            timeInMillis = startDate.time + ((endDate.time - startDate.time) / 2)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.time
+    }
+
+    var wokeUpAt by remember { mutableStateOf(defaultWokeUp) }
+    var backToSleepAt by remember { mutableStateOf<Date?>(defaultBackToSleep) }
+    var includeBackToSleep by remember { mutableStateOf(true) }
+
+    var showWokeUpTimePicker by remember { mutableStateOf(false) }
+    var showBackToSleepTimePicker by remember { mutableStateOf(false) }
+
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
+
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(28.dp))
+                .background(cardBg)
+                .border(2.dp, PastelPink, RoundedCornerShape(28.dp))
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    "👀 Agregar Interrupción",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = textPrimary
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Hora que despertó
+                Text(
+                    "Hora que despertó",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = textPrimary,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { showWokeUpTimePicker = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text("🕐", fontSize = 20.sp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(timeFormat.format(wokeUpAt), fontSize = 16.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Checkbox para incluir "volvió a dormir"
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = includeBackToSleep,
+                        onCheckedChange = { includeBackToSleep = it }
+                    )
+                    Text(
+                        "Volvió a dormir",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = textPrimary
+                    )
+                }
+
+                if (includeBackToSleep) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { showBackToSleepTimePicker = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Text("💤", fontSize = 20.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                backToSleepAt?.let { timeFormat.format(it) } ?: "Seleccionar",
+                                fontSize = 16.sp
+                            )
+                        }
+                    }
+                }
+
+                errorMessage?.let {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Red,
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    TextButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Cancelar")
+                    }
+
+                    Button(
+                        onClick = {
+                            // Validaciones
+                            if (wokeUpAt.time <= startDate.time || wokeUpAt.time >= endDate.time) {
+                                errorMessage = "La hora debe estar entre el inicio y fin del sueño"
+                            } else if (includeBackToSleep && backToSleepAt != null) {
+                                if (backToSleepAt!!.time <= wokeUpAt.time) {
+                                    errorMessage = "Debe volver a dormir después de despertar"
+                                } else if (backToSleepAt!!.time >= endDate.time) {
+                                    errorMessage = "Debe volver a dormir antes del fin"
+                                } else {
+                                    onAdd(Interruption(wokeUpAt, backToSleepAt))
+                                }
+                            } else {
+                                onAdd(Interruption(wokeUpAt, null))
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = PastelPurple),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Agregar", color = Color.White)
+                    }
+                }
+            }
+        }
+    }
+
+    // Time Pickers
+    if (showWokeUpTimePicker) {
+        val cal = Calendar.getInstance()
+        cal.time = wokeUpAt
+        val timePickerState = rememberTimePickerState(
+            initialHour = cal.get(Calendar.HOUR_OF_DAY),
+            initialMinute = cal.get(Calendar.MINUTE)
+        )
+
+        AlertDialog(
+            onDismissRequest = { showWokeUpTimePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val newCal = Calendar.getInstance()
+                    newCal.time = startDate
+                    newCal.set(Calendar.HOUR_OF_DAY, timePickerState.hour)
+                    newCal.set(Calendar.MINUTE, timePickerState.minute)
+                    newCal.set(Calendar.SECOND, 0)
+                    newCal.set(Calendar.MILLISECOND, 0)
+
+                    // Si la hora es antes del inicio, agregar un día
+                    if (newCal.timeInMillis < startDate.time) {
+                        newCal.add(Calendar.DAY_OF_MONTH, 1)
+                    }
+
+                    wokeUpAt = newCal.time
+                    showWokeUpTimePicker = false
+                }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWokeUpTimePicker = false }) {
+                    Text("Cancelar")
+                }
+            },
+            text = {
+                TimePicker(state = timePickerState)
+            }
+        )
+    }
+
+    if (showBackToSleepTimePicker && includeBackToSleep) {
+        val cal = Calendar.getInstance()
+        backToSleepAt?.let { cal.time = it }
+        val timePickerState = rememberTimePickerState(
+            initialHour = cal.get(Calendar.HOUR_OF_DAY),
+            initialMinute = cal.get(Calendar.MINUTE)
+        )
+
+        AlertDialog(
+            onDismissRequest = { showBackToSleepTimePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val newCal = Calendar.getInstance()
+                    newCal.time = wokeUpAt
+                    newCal.set(Calendar.HOUR_OF_DAY, timePickerState.hour)
+                    newCal.set(Calendar.MINUTE, timePickerState.minute)
+                    newCal.set(Calendar.SECOND, 0)
+                    newCal.set(Calendar.MILLISECOND, 0)
+
+                    // Si la hora es antes de despertar, agregar un día
+                    if (newCal.timeInMillis <= wokeUpAt.time) {
+                        newCal.add(Calendar.DAY_OF_MONTH, 1)
+                    }
+
+                    backToSleepAt = newCal.time
+                    showBackToSleepTimePicker = false
+                }) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBackToSleepTimePicker = false }) {
                     Text("Cancelar")
                 }
             },
