@@ -20,37 +20,17 @@ data class SleepUiState(
     val isLoading: Boolean = true
 )
 
-class SleepViewModel(
-    private val repository: SleepRepository
-) : ViewModel() {
+class SleepViewModel(private val repository: SleepRepository) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SleepUiState())
     val uiState: StateFlow<SleepUiState> = _uiState.asStateFlow()
 
     init {
-        // 1. Escuchar la sesión actual
-        viewModelScope.launch {
-            repository.getLastSession().collect { session ->
-                _uiState.update { it.copy(session = session, isLoading = false) }
-            }
-        }
-
-        // 2. Escuchar el historial completo
-        viewModelScope.launch {
-            repository.getHistory().collect { historyList ->
-                _uiState.update { it.copy(history = historyList) }
-            }
-        }
-
-        // 3. Escuchar cambios de pañales
-        viewModelScope.launch {
-            repository.getDiaperChanges().collect { changes ->
-                _uiState.update { it.copy(diaperChanges = changes) }
-            }
-        }
+        viewModelScope.launch { repository.getLastSession().collect { s -> _uiState.update { it.copy(session = s, isLoading = false) } } }
+        viewModelScope.launch { repository.getHistory().collect { h -> _uiState.update { it.copy(history = h) } } }
+        viewModelScope.launch { repository.getDiaperChanges().collect { c -> _uiState.update { it.copy(diaperChanges = c) } } }
     }
 
-    // --- Funciones de sueño ---
     fun startNap() = viewModelScope.launch { repository.startSleep("SIESTA") }
     fun startNight() = viewModelScope.launch { repository.startSleep("NOCHE") }
     fun wakeUp() = viewModelScope.launch { repository.wakeUp() }
@@ -59,11 +39,9 @@ class SleepViewModel(
     fun deleteSession(sessionId: String) = viewModelScope.launch { repository.deleteSession(sessionId) }
     fun addManualSession(session: SleepSession) = viewModelScope.launch { repository.addManualSession(session) }
 
-    // --- Funciones de pañales ---
-    fun addDiaperChange(type: DiaperType, notes: String = "", timestamp: Date = Date()) = viewModelScope.launch {
-        repository.addDiaperChange(type, notes, timestamp)
-    }
-    fun deleteDiaperChange(diaperId: String) = viewModelScope.launch {
-        repository.deleteDiaperChange(diaperId)
-    }
+    // NUEVO: Guardar edición
+    fun updateSession(session: SleepSession) = viewModelScope.launch { repository.updateSession(session) }
+
+    fun addDiaperChange(type: DiaperType, notes: String = "", timestamp: Date = Date()) = viewModelScope.launch { repository.addDiaperChange(type, notes, timestamp) }
+    fun deleteDiaperChange(diaperId: String) = viewModelScope.launch { repository.deleteDiaperChange(diaperId) }
 }

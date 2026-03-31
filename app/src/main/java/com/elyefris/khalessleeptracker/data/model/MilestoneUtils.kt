@@ -1,6 +1,7 @@
 package com.elyefris.khalessleeptracker.data.model
 
 import java.util.concurrent.TimeUnit
+import java.util.Calendar
 
 data class Milestone(
     val id: String,
@@ -10,103 +11,73 @@ data class Milestone(
     val isUnlocked: Boolean
 )
 
-// Función que revisa el historial y desbloquea logros
 fun checkMilestones(history: List<SleepSession>): List<Milestone> {
-    // Solo miramos sesiones terminadas
-    val finishedSessions = history.filter { it.status == SleepStatus.FINALIZADO && it.endTime != null }
+    // REINICIO SEMANAL: Solo miramos los últimos 7 días
+    val sevenDaysAgo = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(7)
+
+    val recentSessions = history.filter {
+        it.status == SleepStatus.FINALIZADO &&
+                it.endTime != null &&
+                it.startTime.time >= sevenDaysAgo
+    }
 
     return listOf(
-        // LOGRO 1: NOCHE PERFECTA
         Milestone(
             id = "perfect_night",
             emoji = "✨",
             title = "Noche de Paz",
-            description = "Durmió más de 9h de corrido sin despertar.",
-            isUnlocked = finishedSessions.any { session ->
-                if (session.type == SleepType.NOCHE && session.endTime != null) {
-                    val durationHours = TimeUnit.MILLISECONDS.toHours(session.endTime.time - session.startTime.time)
-                    durationHours >= 9 && session.interruptions.isEmpty()
-                } else false
+            description = "Esta semana: Durmió más de 9h seguidas sin despertar.",
+            isUnlocked = recentSessions.any { s ->
+                s.type == SleepType.NOCHE && TimeUnit.MILLISECONDS.toHours(s.endTime!!.time - s.startTime.time) >= 9 && s.interruptions.isEmpty()
             }
         ),
-
-        // LOGRO 2: SIESTA OBJETIVO
         Milestone(
             id = "target_nap",
             emoji = "🌿",
             title = "Batería al 100%",
-            description = "Una siesta sólida de casi 2 horas (1h 50m+).",
-            isUnlocked = finishedSessions.any { session ->
-                if (session.type == SleepType.SIESTA && session.endTime != null) {
-                    val durationMin = TimeUnit.MILLISECONDS.toMinutes(session.endTime.time - session.startTime.time)
-                    durationMin >= 110
-                } else false
+            description = "Esta semana: Logró una siesta de casi 2 horas.",
+            isUnlocked = recentSessions.any { s ->
+                s.type == SleepType.SIESTA && TimeUnit.MILLISECONDS.toMinutes(s.endTime!!.time - s.startTime.time) >= 110
             }
         ),
-
-        // LOGRO 3: NINJA
         Milestone(
             id = "ninja",
             emoji = "🦉",
             title = "Ninja del Sueño",
-            description = "Se despertó, pero volvió a dormir en menos de 10 min.",
-            isUnlocked = finishedSessions.any { session ->
-                session.interruptions.any { interruption ->
-                    if (interruption.backToSleepAt != null) {
-                        val awakeTime = interruption.backToSleepAt.time - interruption.wokeUpAt.time
-                        TimeUnit.MILLISECONDS.toMinutes(awakeTime) < 10
-                    } else false
-                }
+            description = "Esta semana: Se despertó y volvió a dormir en menos de 10 min.",
+            isUnlocked = recentSessions.any { s ->
+                s.interruptions.any { i -> i.backToSleepAt != null && TimeUnit.MILLISECONDS.toMinutes(i.backToSleepAt.time - i.wokeUpAt.time) < 10 }
             }
         ),
-
-        // LOGRO 4: RACHA
         Milestone(
-            id = "streak",
-            emoji = "💫",
-            title = "En Racha",
-            description = "Acumula 3 noches perfectas en el historial.",
-            isUnlocked = finishedSessions.count { session ->
-                val duration = if (session.endTime != null) session.endTime.time - session.startTime.time else 0
-                session.type == SleepType.NOCHE && session.interruptions.isEmpty() && TimeUnit.MILLISECONDS.toHours(duration) >= 8
+            id = "early_bird",
+            emoji = "🌅",
+            title = "Madrugador",
+            description = "Esta semana: Despertó listo para el día antes de las 6:30 AM.",
+            isUnlocked = recentSessions.any { s ->
+                if (s.type == SleepType.NOCHE && s.endTime != null) {
+                    val cal = Calendar.getInstance().apply { time = s.endTime }
+                    val hour = cal.get(Calendar.HOUR_OF_DAY)
+                    val min = cal.get(Calendar.MINUTE)
+                    hour < 6 || (hour == 6 && min <= 30)
+                } else false
+            }
+        ),
+        Milestone(
+            id = "streak_week",
+            emoji = "🔥",
+            title = "Racha Semanal",
+            description = "Esta semana: Registró 3 noches buenas de al menos 8 horas.",
+            isUnlocked = recentSessions.count { s ->
+                s.type == SleepType.NOCHE && TimeUnit.MILLISECONDS.toHours(s.endTime!!.time - s.startTime.time) >= 8
             } >= 3
         ),
-
-        // NUEVO LOGRO 5: OSO HIBERNANDO
-        Milestone(
-            id = "hibernating_bear",
-            emoji = "🐻",
-            title = "Oso Hibernando",
-            description = "Una noche de sueño profundo de más de 11 horas.",
-            isUnlocked = finishedSessions.any { session ->
-                if (session.type == SleepType.NOCHE && session.endTime != null) {
-                    val durationHours = TimeUnit.MILLISECONDS.toHours(session.endTime.time - session.startTime.time)
-                    durationHours >= 11
-                } else false
-            }
-        ),
-
-        // NUEVO LOGRO 6: SIESTA RELÁMPAGO
-        Milestone(
-            id = "power_nap",
-            emoji = "⚡",
-            title = "Siesta Relámpago",
-            description = "Una siesta corta y revitalizante de entre 20 y 45 min.",
-            isUnlocked = finishedSessions.any { session ->
-                if (session.type == SleepType.SIESTA && session.endTime != null) {
-                    val durationMin = TimeUnit.MILLISECONDS.toMinutes(session.endTime.time - session.startTime.time)
-                    durationMin in 20..45
-                } else false
-            }
-        ),
-
-        // NUEVO LOGRO 7: CONSTANCIA
         Milestone(
             id = "frequent_tracker",
             emoji = "📅",
-            title = "Constancia Pura",
-            description = "Has registrado más de 30 sesiones de sueño.",
-            isUnlocked = finishedSessions.size >= 30
+            title = "Padres Constantes",
+            description = "Esta semana: Más de 15 registros guardados.",
+            isUnlocked = recentSessions.size >= 15
         )
     )
 }

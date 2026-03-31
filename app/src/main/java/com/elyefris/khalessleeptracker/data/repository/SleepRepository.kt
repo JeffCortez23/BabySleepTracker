@@ -14,12 +14,13 @@ interface SleepRepository {
     suspend fun wakeUp()
     suspend fun backToSleep()
 
-    // Funciones de eliminación y manual
+    // Funciones de modificación
     suspend fun deleteSession(sessionId: String)
     suspend fun addManualSession(session: SleepSession)
+    suspend fun updateSession(session: SleepSession) // NUEVA: Para editar
 
-    // Funciones de Pañales (Actualizada)
+    // Funciones de Pañales
     fun getDiaperChanges(): Flow<List<DiaperChange>>
-    suspend fun addDiaperChange(type: DiaperType, notes: String, timestamp: Date) // <--- Cambio aquí
+    suspend fun addDiaperChange(type: DiaperType, notes: String, timestamp: Date)
     suspend fun deleteDiaperChange(diaperId: String)
 }
