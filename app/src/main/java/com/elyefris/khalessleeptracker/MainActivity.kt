@@ -47,6 +47,7 @@ import com.elyefris.khalessleeptracker.utils.calculateRealSleepTime
 import com.elyefris.khalessleeptracker.utils.formatSleepDuration
 import com.elyefris.khalessleeptracker.viewmodel.SleepViewModel
 import com.elyefris.khalessleeptracker.data.model.Interruption
+import com.elyefris.khalessleeptracker.data.model.checkMilestones
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -85,7 +86,6 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainScreen(viewModel: SleepViewModel) {
     val state by viewModel.uiState.collectAsState()
-
     val isDark = isSystemInDarkTheme()
 
     val backgroundBrush = if (isDark) {
@@ -94,9 +94,10 @@ fun MainScreen(viewModel: SleepViewModel) {
         Brush.linearGradient(listOf(PastelBlue, PastelPurple, PastelPink))
     }
 
-    val primaryTextColor = if (isDark) Color.White.copy(alpha = 0.9f) else Color.DarkGray.copy(alpha = 0.8f)
-    val secondaryTextColor = if (isDark) Color.LightGray else Color.DarkGray.copy(alpha = 0.6f)
-    val cardBackgroundColor = if (isDark) Color(0xFF1E1E1E).copy(alpha = 0.95f) else Color.White.copy(alpha = 0.95f)
+    // CONTRASTES MEJORADOS (Gris Pizarra elegante)
+    val primaryTextColor = if (isDark) Color(0xFFF7FAFC) else Color(0xFF2D3748)
+    val secondaryTextColor = if (isDark) Color(0xFFA0AEC0) else Color(0xFF718096)
+    val cardBackgroundColor = if (isDark) Color(0xFF1A202C).copy(alpha = 0.95f) else Color.White.copy(alpha = 0.95f)
 
     var selectedSession by remember { mutableStateOf<SleepSession?>(null) }
     var showAchievements by remember { mutableStateOf(false) }
@@ -107,14 +108,13 @@ fun MainScreen(viewModel: SleepViewModel) {
     var showManualEntry by remember { mutableStateOf(false) }
     var showDiaperHistory by remember { mutableStateOf(false) }
 
-    // Estado para el temporizador en tiempo real
     var currentTimeMillis by remember { mutableStateOf(System.currentTimeMillis()) }
 
     LaunchedEffect(state.session?.status) {
         if (state.session?.status == SleepStatus.DURMIENDO || state.session?.status == SleepStatus.DESPIERTO) {
             while (true) {
                 currentTimeMillis = System.currentTimeMillis()
-                delay(60000L) // Actualizar cada minuto
+                delay(60000L)
             }
         }
     }
@@ -131,60 +131,47 @@ fun MainScreen(viewModel: SleepViewModel) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-
             // --- HEADER ---
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SmallFloatingActionButton(
                         onClick = { showDiaperDialog = true },
-                        containerColor = if (isDark) Color(0xFF2E2E2E) else Color.White.copy(alpha = 0.9f)
-                    ) {
-                        Text("🧷", fontSize = 20.sp)
-                    }
+                        containerColor = if (isDark) Color(0xFF2D3748) else Color.White.copy(alpha = 0.9f)
+                    ) { Text("🫧", fontSize = 20.sp) } // Burbujas en lugar de pañal
 
                     SmallFloatingActionButton(
                         onClick = { showDiaperHistory = true },
-                        containerColor = if (isDark) Color(0xFF2E2E2E) else Color.White.copy(alpha = 0.9f)
-                    ) {
-                        Text("📋", fontSize = 20.sp)
-                    }
+                        containerColor = if (isDark) Color(0xFF2D3748) else Color.White.copy(alpha = 0.9f)
+                    ) { Text("📋", fontSize = 20.sp) }
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SmallFloatingActionButton(
                         onClick = { showManualEntry = true },
-                        containerColor = if (isDark) Color(0xFF2E2E2E) else Color.White.copy(alpha = 0.9f)
-                    ) {
-                        Text("✏️", fontSize = 20.sp)
-                    }
+                        containerColor = if (isDark) Color(0xFF2D3748) else Color.White.copy(alpha = 0.9f)
+                    ) { Text("📝", fontSize = 20.sp) }
 
                     SmallFloatingActionButton(
                         onClick = { showAchievements = true },
-                        containerColor = if (isDark) Color(0xFF2E2E2E) else Color.White.copy(alpha = 0.9f)
-                    ) {
-                        Icon(imageVector = Icons.Default.Star, contentDescription = "Logros", tint = Color(0xFFFFD700))
-                    }
+                        containerColor = if (isDark) Color(0xFF2D3748) else Color.White.copy(alpha = 0.9f)
+                    ) { Icon(imageVector = Icons.Default.Star, contentDescription = "Logros", tint = Color(0xFFECC94B)) }
                 }
             }
 
-            // --- 1. TARJETA PRINCIPAL (MEJORADA CON TEMPORIZADOR REAL) ---
-            LiquidCard(
-                modifier = Modifier.size(width = 340.dp, height = 240.dp)
-            ) {
+            // --- 1. TARJETA PRINCIPAL ---
+            LiquidCard(modifier = Modifier.size(width = 340.dp, height = 240.dp)) {
                 Column(
                     modifier = Modifier.align(Alignment.Center),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
                         text = when (state.session?.status) {
-                            SleepStatus.DURMIENDO -> if (state.session?.type == SleepType.SIESTA) "Siesta Activa ☀️" else "Durmiendo 🌙"
-                            SleepStatus.DESPIERTO -> "En Pausa 👀"
-                            else -> "Lista para dormir"
+                            SleepStatus.DURMIENDO -> if (state.session?.type == SleepType.SIESTA) "Siesta Activa 🌤️" else "Dulces Sueños 🌜"
+                            SleepStatus.DESPIERTO -> "En Pausa ✨"
+                            else -> "Listo para dormir"
                         },
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
@@ -195,17 +182,15 @@ fun MainScreen(viewModel: SleepViewModel) {
 
                     state.session?.let { session ->
                         if (session.status != SleepStatus.FINALIZADO) {
-                            // Cálculos para el tiempo en vivo
                             val diffMillis = currentTimeMillis - session.startTime.time
                             val hours = TimeUnit.MILLISECONDS.toHours(diffMillis)
                             val minutes = TimeUnit.MILLISECONDS.toMinutes(diffMillis) % 60
 
-                            // Duración principal gigante (Reduciendo carga mental)
                             Text(
                                 text = "${hours}h ${minutes}m",
                                 fontSize = 52.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = if (isDark) Color.White else PastelPurple
+                                color = if (isDark) Color.White else Color(0xFF6B46C1) // Purpura más profundo para contraste
                             )
 
                             Spacer(modifier = Modifier.height(8.dp))
@@ -228,7 +213,7 @@ fun MainScreen(viewModel: SleepViewModel) {
                 }
             }
 
-            // --- 2. HISTORIAL CON NAVEGACIÓN JERÁRQUICA ---
+            // --- 2. HISTORIAL ---
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -236,7 +221,7 @@ fun MainScreen(viewModel: SleepViewModel) {
                     .padding(horizontal = 24.dp)
             ) {
                 Text(
-                    text = "Historial Completo",
+                    text = "Historial de Sueño",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = secondaryTextColor,
@@ -262,7 +247,7 @@ fun MainScreen(viewModel: SleepViewModel) {
                 }
             }
 
-            // --- 3. BOTONES (FLUJO UX MEJORADO) ---
+            // --- 3. BOTONES ---
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
@@ -273,31 +258,30 @@ fun MainScreen(viewModel: SleepViewModel) {
                 if (state.session == null || state.session?.status == SleepStatus.FINALIZADO) {
                     Button(
                         onClick = { viewModel.startNap() },
-                        colors = ButtonDefaults.buttonColors(containerColor = if(isDark) Color(0xFFFFF7ED) else PastelCream),
+                        colors = ButtonDefaults.buttonColors(containerColor = if(isDark) Color(0xFF4A5568) else PastelCream),
                         elevation = ButtonDefaults.buttonElevation(4.dp),
                         shape = RoundedCornerShape(24.dp),
                         modifier = Modifier.weight(1f).fillMaxHeight()
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("☀️", fontSize = 24.sp)
-                            Text("Siesta", color = Color.DarkGray, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text("🌤️", fontSize = 24.sp)
+                            Text("Siesta", color = if(isDark) Color.White else Color(0xFF2D3748), fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
                     Button(
                         onClick = { viewModel.startNight() },
-                        colors = ButtonDefaults.buttonColors(containerColor = PastelPurple),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF805AD5)), // Morado suave pero visible
                         elevation = ButtonDefaults.buttonElevation(4.dp),
                         shape = RoundedCornerShape(24.dp),
                         modifier = Modifier.weight(1f).fillMaxHeight()
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("🌙", fontSize = 24.sp)
+                            Text("🌜", fontSize = 24.sp)
                             Text("Noche", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 } else {
-                    // Flujo unificado: Un botón gigante al dormir, opciones claras al despertar
                     if (state.session?.status == SleepStatus.DURMIENDO) {
                         Button(
                             onClick = { viewModel.wakeUp() },
@@ -305,7 +289,7 @@ fun MainScreen(viewModel: SleepViewModel) {
                             shape = RoundedCornerShape(24.dp),
                             modifier = Modifier.fillMaxWidth().fillMaxHeight()
                         ) {
-                            Text("¡Despertó! 👀", color = Color.DarkGray, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                            Text("¡Despertó! ✨", color = Color(0xFF2D3748), fontWeight = FontWeight.Bold, fontSize = 22.sp)
                         }
                     } else if (state.session?.status == SleepStatus.DESPIERTO) {
                         Button(
@@ -315,20 +299,20 @@ fun MainScreen(viewModel: SleepViewModel) {
                             modifier = Modifier.weight(1f).fillMaxHeight()
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("Reanudar", color = Color.DarkGray, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                                Text("Volvió a dormir", color = Color.DarkGray.copy(alpha = 0.7f), fontSize = 12.sp)
+                                Text("Reanudar", color = Color(0xFF2D3748), fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                Text("Volvió a dormir", color = Color(0xFF2D3748).copy(alpha = 0.7f), fontSize = 12.sp)
                             }
                         }
 
                         Button(
                             onClick = { viewModel.finishSleep() },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.Red.copy(alpha = 0.8f)),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE53E3E).copy(alpha = 0.8f)),
                             shape = RoundedCornerShape(24.dp),
                             modifier = Modifier.weight(1f).fillMaxHeight()
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text("Finalizar", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                                Text("Guardar registro", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
+                                Text("Guardar", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
                             }
                         }
                     }
@@ -350,7 +334,6 @@ fun MainScreen(viewModel: SleepViewModel) {
             )
         }
 
-        // (Se mantienen los demás diálogos: Logros, Eliminación, Entrada Manual)
         if (showAchievements) {
             AchievementsDialog(
                 history = state.history,
@@ -421,33 +404,19 @@ fun MainScreen(viewModel: SleepViewModel) {
 }
 
 // ==========================================
-// VISTAS DE HISTORIAL MEJORADAS (MÁS ESCANEABLES)
+// VISTAS DE HISTORIAL
 // ==========================================
-
 @Composable
-fun DateListView(
-    history: List<SleepSession>,
-    primaryTextColor: Color,
-    secondaryTextColor: Color,
-    onDateClick: (String) -> Unit
-) {
-    val groupedByDate = history
-        .filter { it.status == SleepStatus.FINALIZADO }
-        .groupBy {
-            SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(it.startTime)
-        }
+fun DateListView(history: List<SleepSession>, primaryTextColor: Color, secondaryTextColor: Color, onDateClick: (String) -> Unit) {
+    val groupedByDate = history.filter { it.status == SleepStatus.FINALIZADO }
+        .groupBy { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(it.startTime) }
         .toSortedMap(compareByDescending { it })
 
-    LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        contentPadding = PaddingValues(bottom = 12.dp)
-    ) {
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
         items(groupedByDate.keys.toList()) { dateKey ->
             val sessions = groupedByDate[dateKey] ?: emptyList()
             val date = sessions.first().startTime
             val dateFmt = SimpleDateFormat("EEEE dd MMMM yyyy", Locale("es", "ES")).format(date)
-
-            // Cálculo total de sueño del día para mejor contexto
             var totalMillis = 0L
             sessions.forEach {
                 val (h, m) = calculateRealSleepTime(it)
@@ -456,39 +425,15 @@ fun DateListView(
             val totalHours = totalMillis / 3600000L
             val totalMinutes = (totalMillis % 3600000L) / 60000L
 
-            LiquidCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onDateClick(dateKey) }
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
+            LiquidCard(modifier = Modifier.fillMaxWidth().clickable { onDateClick(dateKey) }) {
+                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = dateFmt.replaceFirstChar { it.uppercase() },
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = primaryTextColor
-                        )
+                        Text(dateFmt.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = primaryTextColor)
                         Spacer(modifier = Modifier.height(4.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "🟦 Total: ${totalHours}h ${totalMinutes}m",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = PastelPurple
-                            )
+                            Text("☁️ Total: ${totalHours}h ${totalMinutes}m", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = Color(0xFF805AD5))
                             Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = "📊 ${sessions.size} registros",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = secondaryTextColor
-                            )
+                            Text("📊 ${sessions.size} registros", style = MaterialTheme.typography.bodySmall, color = secondaryTextColor)
                         }
                     }
                     Text("➜", fontSize = 24.sp, color = primaryTextColor)
@@ -499,73 +444,32 @@ fun DateListView(
 }
 
 @Composable
-fun SessionsOfDayView(
-    history: List<SleepSession>,
-    selectedDate: String,
-    primaryTextColor: Color,
-    secondaryTextColor: Color,
-    onBack: () -> Unit,
-    onSessionClick: (SleepSession) -> Unit
-) {
-    val sessions = history
-        .filter { it.status == SleepStatus.FINALIZADO }
+fun SessionsOfDayView(history: List<SleepSession>, selectedDate: String, primaryTextColor: Color, secondaryTextColor: Color, onBack: () -> Unit, onSessionClick: (SleepSession) -> Unit) {
+    val sessions = history.filter { it.status == SleepStatus.FINALIZADO }
         .filter { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(it.startTime) == selectedDate }
         .sortedByDescending { it.startTime }
 
     Column {
-        LiquidCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { onBack() }
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+        LiquidCard(modifier = Modifier.fillMaxWidth().clickable { onBack() }) {
+            Row(modifier = Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("⬅", fontSize = 24.sp)
                 Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = "Volver a fechas",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = primaryTextColor
-                )
+                Text("Volver a fechas", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = primaryTextColor)
             }
         }
-
         Spacer(modifier = Modifier.height(10.dp))
-
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(sessions) { session ->
-                LiquidCard(
-                    modifier = Modifier.fillMaxWidth().clickable { onSessionClick(session) }
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(text = if (session.type == SleepType.SIESTA) "☀️" else "🌙", fontSize = 28.sp)
+                LiquidCard(modifier = Modifier.fillMaxWidth().clickable { onSessionClick(session) }) {
+                    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = if (session.type == SleepType.SIESTA) "🌤️" else "🌜", fontSize = 28.sp)
                         Spacer(modifier = Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             val timeFmt = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(session.startTime)
                             val endFmt = session.endTime?.let { SimpleDateFormat("hh:mm a", Locale.getDefault()).format(it) } ?: "..."
-
-                            Text(
-                                text = "$timeFmt - $endFmt",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.SemiBold,
-                                color = primaryTextColor
-                            )
-
+                            Text("$timeFmt - $endFmt", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = primaryTextColor)
                             val (hours, minutes) = calculateRealSleepTime(session)
-                            val durationText = formatSleepDuration(hours, minutes)
-
-                            Text(
-                                text = durationText,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = PastelPurple
-                            )
+                            Text(formatSleepDuration(hours, minutes), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = Color(0xFF805AD5))
                         }
                         Text("➜", fontSize = 20.sp, color = primaryTextColor)
                     }
@@ -576,182 +480,233 @@ fun SessionsOfDayView(
 }
 
 // ==========================================
-// DETALLES DEL SUEÑO (MODAL REDISEÑADO)
+// MODALES RESTAURADOS Y ESTILIZADOS
 // ==========================================
 
 @Composable
-fun SessionDetailDialog(
-    session: SleepSession,
-    cardBg: Color,
-    textPrimary: Color,
-    onDismiss: () -> Unit,
-    onDelete: (SleepSession) -> Unit
-) {
+fun AchievementsDialog(history: List<SleepSession>, isDark: Boolean, cardBg: Color, textPrimary: Color, onDismiss: () -> Unit) {
+    val milestones = remember(history) { checkMilestones(history) }
+
     Dialog(onDismissRequest = onDismiss) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(28.dp))
-                .background(cardBg)
-                .border(3.dp, Brush.linearGradient(listOf(PastelPink, PastelPurple)), RoundedCornerShape(28.dp))
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(cardBg)
+                .border(3.dp, Brush.linearGradient(listOf(Color(0xFFECC94B), Color(0xFFDD6B20))), RoundedCornerShape(28.dp))
         ) {
-            Column(
-                modifier = Modifier
-                    .padding(24.dp)
-                    .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Header optimizado
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
+            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Logros 🏆", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = textPrimary)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.height(350.dp)
                 ) {
-                    IconButton(onClick = { onDelete(session) }) { Text("🗑️", fontSize = 24.sp) }
-                }
+                    items(milestones) { milestone ->
+                        val itemBg = if (milestone.isUnlocked) {
+                            if(isDark) Color(0xFF2B6CB0).copy(alpha=0.3f) else PastelBlue.copy(alpha=0.4f)
+                        } else {
+                            if(isDark) Color.Black.copy(alpha=0.3f) else Color.LightGray.copy(alpha=0.2f)
+                        }
 
-                // TIEMPO EN GRANDE (Jerarquía correcta)
-                val (hours, minutes) = calculateRealSleepTime(session)
-                val durationText = formatSleepDuration(hours, minutes)
-
-                Text(
-                    text = durationText,
-                    fontSize = 52.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = PastelPurple
-                )
-
-                Text(
-                    text = "Tiempo Total de Sueño",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = textPrimary.copy(alpha = 0.7f)
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
-
-                // 1. INICIO
-                TimelineEvent(
-                    time = timeFormat.format(session.startTime),
-                    title = "Se durmió",
-                    icon = if (session.type == SleepType.SIESTA) "☀️" else "🌙",
-                    color = PastelBlue,
-                    isFirst = true,
-                    isLast = session.interruptions.isEmpty() && session.endTime == null,
-                    textColor = textPrimary
-                )
-
-                // 2. INTERRUPCIONES
-                session.interruptions.forEach { interruption ->
-                    TimelineEvent(
-                        time = timeFormat.format(interruption.wokeUpAt),
-                        title = "Despertó",
-                        icon = "👀",
-                        color = PastelPink,
-                        isFirst = false,
-                        isLast = false,
-                        textColor = textPrimary
-                    )
-
-                    interruption.backToSleepAt?.let { backTime ->
-                        TimelineEvent(
-                            time = timeFormat.format(backTime),
-                            title = "Volvió a dormir",
-                            icon = "💤",
-                            color = PastelBlue,
-                            isFirst = false,
-                            isLast = false,
-                            textColor = textPrimary
-                        )
+                        Column(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(itemBg)
+                                .border(1.dp, if (milestone.isUnlocked) PastelBlue else Color.Transparent, RoundedCornerShape(16.dp))
+                                .padding(12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = milestone.emoji,
+                                fontSize = 32.sp,
+                                color = if (milestone.isUnlocked) Color.Unspecified else Color.Gray.copy(alpha = 0.5f)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = milestone.title,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = if (milestone.isUnlocked) textPrimary else Color.Gray,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = milestone.description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (milestone.isUnlocked) textPrimary.copy(alpha=0.8f) else Color.Gray,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 12.sp,
+                                fontSize = 10.sp
+                            )
+                        }
                     }
                 }
 
-                // 3. FIN
-                session.endTime?.let { end ->
-                    TimelineEvent(
-                        time = timeFormat.format(end),
-                        title = "Despertó Definitivo",
-                        icon = "🏁",
-                        color = PastelPurple,
-                        isFirst = false,
-                        isLast = true,
-                        textColor = textPrimary
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                Button(
-                    onClick = onDismiss,
-                    colors = ButtonDefaults.buttonColors(containerColor = PastelPurple),
-                    shape = RoundedCornerShape(50),
-                    modifier = Modifier.fillMaxWidth().height(50.dp)
-                ) {
-                    Text("Cerrar", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF805AD5))) {
+                    Text("Cerrar", color = Color.White)
                 }
             }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ManualEntryDialog(isDark: Boolean, cardBg: Color, textPrimary: Color, onDismiss: () -> Unit, onSave: (SleepSession) -> Unit) {
+    var selectedType by remember { mutableStateOf(SleepType.NOCHE) }
+    var startDate by remember { mutableStateOf(Date(System.currentTimeMillis() - 8 * 3600000)) } // 8 horas atrás por defecto
+    var endDate by remember { mutableStateOf(Date()) }
+
+    var showStartDatePicker by remember { mutableStateOf(false) }
+    var showStartTimePicker by remember { mutableStateOf(false) }
+    var showEndDatePicker by remember { mutableStateOf(false) }
+    var showEndTimePicker by remember { mutableStateOf(false) }
+
+    val dateFormat = SimpleDateFormat("EEE dd MMM yyyy", Locale("es", "ES"))
+    val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
+
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier.fillMaxWidth().fillMaxHeight(0.8f).clip(RoundedCornerShape(28.dp)).background(cardBg)
+                .border(3.dp, Brush.linearGradient(listOf(PastelBlue, PastelPurple)), RoundedCornerShape(28.dp))
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("📝 Registro Manual", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = textPrimary)
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = { selectedType = SleepType.SIESTA },
+                        colors = ButtonDefaults.buttonColors(containerColor = if (selectedType == SleepType.SIESTA) PastelCream else Color.Gray.copy(alpha = 0.3f)),
+                        modifier = Modifier.weight(1f)
+                    ) { Text("🌤️ Siesta", color = if(selectedType == SleepType.SIESTA) Color(0xFF2D3748) else Color.Gray) }
+
+                    Button(
+                        onClick = { selectedType = SleepType.NOCHE },
+                        colors = ButtonDefaults.buttonColors(containerColor = if (selectedType == SleepType.NOCHE) Color(0xFF805AD5) else Color.Gray.copy(alpha = 0.3f)),
+                        modifier = Modifier.weight(1f)
+                    ) { Text("🌜 Noche", color = Color.White) }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Text("Inicio", style = MaterialTheme.typography.titleSmall, color = textPrimary, modifier = Modifier.fillMaxWidth())
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(onClick = { showStartDatePicker = true }, modifier = Modifier.weight(1f)) {
+                        Text(dateFormat.format(startDate), fontSize = 12.sp, color = textPrimary)
+                    }
+                    OutlinedButton(onClick = { showStartTimePicker = true }, modifier = Modifier.weight(1f)) {
+                        Text(timeFormat.format(startDate), fontSize = 12.sp, color = textPrimary)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text("Fin", style = MaterialTheme.typography.titleSmall, color = textPrimary, modifier = Modifier.fillMaxWidth())
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(onClick = { showEndDatePicker = true }, modifier = Modifier.weight(1f)) {
+                        Text(dateFormat.format(endDate), fontSize = 12.sp, color = textPrimary)
+                    }
+                    OutlinedButton(onClick = { showEndTimePicker = true }, modifier = Modifier.weight(1f)) {
+                        Text(timeFormat.format(endDate), fontSize = 12.sp, color = textPrimary)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    TextButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text("Cancelar", color = textPrimary) }
+                    Button(
+                        onClick = {
+                            if (endDate.time > startDate.time) {
+                                onSave(SleepSession(startTime = startDate, endTime = endDate, type = selectedType, status = SleepStatus.FINALIZADO))
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF805AD5)),
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Guardar", color = Color.White) }
+                }
+            }
+        }
+    }
+
+    // Pickers simplificados
+    if (showStartDatePicker) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = startDate.time)
+        DatePickerDialog(
+            onDismissRequest = { showStartDatePicker = false },
+            confirmButton = { TextButton(onClick = { datePickerState.selectedDateMillis?.let { startDate = Date(it) }; showStartDatePicker = false }) { Text("OK") } }
+        ) { DatePicker(state = datePickerState) }
+    }
+    if (showStartTimePicker) {
+        val timePickerState = rememberTimePickerState()
+        AlertDialog(
+            onDismissRequest = { showStartTimePicker = false },
+            confirmButton = { TextButton(onClick = { val cal = Calendar.getInstance().apply { time = startDate; set(Calendar.HOUR_OF_DAY, timePickerState.hour); set(Calendar.MINUTE, timePickerState.minute) }; startDate = cal.time; showStartTimePicker = false }) { Text("OK") } },
+            text = { TimePicker(state = timePickerState) }
+        )
+    }
+    if (showEndDatePicker) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = endDate.time)
+        DatePickerDialog(
+            onDismissRequest = { showEndDatePicker = false },
+            confirmButton = { TextButton(onClick = { datePickerState.selectedDateMillis?.let { endDate = Date(it) }; showEndDatePicker = false }) { Text("OK") } }
+        ) { DatePicker(state = datePickerState) }
+    }
+    if (showEndTimePicker) {
+        val timePickerState = rememberTimePickerState()
+        AlertDialog(
+            onDismissRequest = { showEndTimePicker = false },
+            confirmButton = { TextButton(onClick = { val cal = Calendar.getInstance().apply { time = endDate; set(Calendar.HOUR_OF_DAY, timePickerState.hour); set(Calendar.MINUTE, timePickerState.minute) }; endDate = cal.time; showEndTimePicker = false }) { Text("OK") } },
+            text = { TimePicker(state = timePickerState) }
+        )
+    }
+}
+
 // ==========================================
-// REGISTRO RÁPIDO DE PAÑAL (1-TAP)
+// REGISTRO RÁPIDO DE PAÑAL (Emojis Estéticos)
 // ==========================================
 
 @Composable
-fun DiaperDialog(
-    cardBg: Color,
-    textPrimary: Color,
-    onDismiss: () -> Unit,
-    onAddDiaper: (DiaperType) -> Unit
-) {
+fun DiaperDialog(cardBg: Color, textPrimary: Color, onDismiss: () -> Unit, onAddDiaper: (DiaperType) -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(28.dp))
-                .background(cardBg)
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(cardBg)
                 .border(3.dp, Brush.linearGradient(listOf(PastelBlue, PastelPink)), RoundedCornerShape(28.dp))
         ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text("¿Qué pasó? 🧷", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = textPrimary)
+            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("¿Qué pasó? 🫧", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = textPrimary)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("Selecciona para guardar automáticamente", color = textPrimary.copy(alpha=0.6f), fontSize = 12.sp)
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Selección de un solo toque
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Button(
                         onClick = { onAddDiaper(DiaperType.ORINA) },
-                        colors = ButtonDefaults.buttonColors(containerColor = PastelBlue.copy(alpha=0.8f)),
+                        colors = ButtonDefaults.buttonColors(containerColor = PastelBlue),
                         modifier = Modifier.fillMaxWidth().height(60.dp),
                         shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Text("💧 Orina", fontSize = 20.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                    }
+                    ) { Text("💧 Orina", fontSize = 20.sp, color = Color(0xFF2D3748), fontWeight = FontWeight.Bold) }
 
                     Button(
                         onClick = { onAddDiaper(DiaperType.POPO) },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC89F88)), // Color marrón suave
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEDDFD6)), // Tono beige/arena
                         modifier = Modifier.fillMaxWidth().height(60.dp),
                         shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Text("💩 Popó", fontSize = 20.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                    }
+                    ) { Text("🤎 Sólido", fontSize = 20.sp, color = Color(0xFF5C4033), fontWeight = FontWeight.Bold) } // Corazón marrón + "Sólido" es más estético
 
                     Button(
                         onClick = { onAddDiaper(DiaperType.AMBOS) },
-                        colors = ButtonDefaults.buttonColors(containerColor = PastelPurple),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE9D8FD)), // Morado muy suave
                         modifier = Modifier.fillMaxWidth().height(60.dp),
                         shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Text("💧💩 Ambos", fontSize = 20.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                    }
+                    ) { Text("💧🤎 Ambos", fontSize = 20.sp, color = Color(0xFF44337A), fontWeight = FontWeight.Bold) }
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -761,82 +716,27 @@ fun DiaperDialog(
     }
 }
 
-// ==========================================
-// HISTORIAL DE PAÑALES VISUAL
-// ==========================================
-
 @Composable
-fun DiaperHistoryDialog(
-    diaperChanges: List<DiaperChange>,
-    cardBg: Color,
-    textPrimary: Color,
-    secondaryTextColor: Color,
-    onDismiss: () -> Unit,
-    onDelete: (String) -> Unit
-) {
+fun DiaperHistoryDialog(diaperChanges: List<DiaperChange>, cardBg: Color, textPrimary: Color, secondaryTextColor: Color, onDismiss: () -> Unit, onDelete: (String) -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.85f)
-                .clip(RoundedCornerShape(28.dp))
-                .background(cardBg)
-                .border(3.dp, Brush.linearGradient(listOf(PastelBlue, PastelPink)), RoundedCornerShape(28.dp))
-        ) {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    "Historial de Pañales",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = textPrimary
-                )
+        Box(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.85f).clip(RoundedCornerShape(28.dp)).background(cardBg).border(3.dp, Brush.linearGradient(listOf(PastelBlue, PastelPink)), RoundedCornerShape(28.dp))) {
+            Column(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Historial de Pañales", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = textPrimary)
                 Spacer(modifier = Modifier.height(16.dp))
-
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
+                LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(diaperChanges.sortedByDescending { it.timestamp }) { change ->
-                        // Colores visuales
                         val itemColor = when(change.type) {
-                            DiaperType.ORINA -> PastelBlue.copy(alpha=0.2f)
-                            DiaperType.POPO -> Color(0xFFC89F88).copy(alpha=0.3f)
-                            DiaperType.AMBOS -> PastelPurple.copy(alpha=0.2f)
+                            DiaperType.ORINA -> PastelBlue.copy(alpha=0.3f)
+                            DiaperType.POPO -> Color(0xFFEDDFD6).copy(alpha=0.5f)
+                            DiaperType.AMBOS -> Color(0xFFE9D8FD).copy(alpha=0.5f)
                         }
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(itemColor)
-                                .padding(16.dp)
-                        ) {
+                        Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(itemColor).padding(16.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    when(change.type){
-                                        DiaperType.ORINA -> "💧"
-                                        DiaperType.POPO -> "💩"
-                                        DiaperType.AMBOS -> "💧💩"
-                                    },
-                                    fontSize = 28.sp
-                                )
+                                Text(when(change.type){ DiaperType.ORINA -> "💧"; DiaperType.POPO -> "🤎"; DiaperType.AMBOS -> "💧🤎" }, fontSize = 28.sp)
                                 Spacer(modifier = Modifier.width(16.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        when(change.type){
-                                            DiaperType.ORINA -> "Orina"
-                                            DiaperType.POPO -> "Popó"
-                                            DiaperType.AMBOS -> "Orina y Popó"
-                                        },
-                                        fontWeight = FontWeight.Bold, color = textPrimary
-                                    )
-                                    Text(
-                                        SimpleDateFormat("EEE dd MMM, hh:mm a", Locale("es", "ES")).format(change.timestamp).replaceFirstChar{it.uppercase()},
-                                        fontSize = 12.sp, color = secondaryTextColor
-                                    )
+                                    Text(when(change.type){ DiaperType.ORINA -> "Orina"; DiaperType.POPO -> "Sólido"; DiaperType.AMBOS -> "Orina y Sólido" }, fontWeight = FontWeight.Bold, color = textPrimary)
+                                    Text(SimpleDateFormat("EEE dd MMM, hh:mm a", Locale("es", "ES")).format(change.timestamp).replaceFirstChar{it.uppercase()}, fontSize = 12.sp, color = secondaryTextColor)
                                 }
                                 IconButton(onClick = { onDelete(change.id) }) { Text("🗑️", fontSize = 18.sp) }
                             }
@@ -844,41 +744,36 @@ fun DiaperHistoryDialog(
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
-                Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Cerrar") }
+                Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF805AD5))) { Text("Cerrar", color = Color.White) }
             }
         }
     }
 }
 
-// ==========================================
-// COMPONENTES RESTANTES (Sin cambios funcionales, solo se mantienen)
-// ==========================================
+// Resto de los diálogos (SessionDetailDialog, DeleteConfirmationDialog, TimelineEvent)
+// se mantienen igual a la versión anterior ya que ya habían sido optimizados.
 
 @Composable
-fun AchievementsDialog(history: List<SleepSession>, isDark: Boolean, cardBg: Color, textPrimary: Color, onDismiss: () -> Unit) {
-    // (Mismo código de Achievements Dialog de tu archivo original)
-    // Para brevedad en esta respuesta, asume que el código interno de AchievementsDialog
-    // es exactamente el mismo que me pasaste.
+fun SessionDetailDialog(session: SleepSession, cardBg: Color, textPrimary: Color, onDismiss: () -> Unit, onDelete: (SleepSession) -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
-        Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(cardBg).padding(24.dp)) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Logros en construcción 🏆", color = textPrimary)
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(onClick = onDismiss) { Text("Cerrar") }
-            }
-        }
-    }
-}
-
-@Composable
-fun ManualEntryDialog(isDark: Boolean, cardBg: Color, textPrimary: Color, onDismiss: () -> Unit, onSave: (SleepSession) -> Unit) {
-    // (Mismo código de Manual Entry Dialog de tu archivo original)
-    Dialog(onDismissRequest = onDismiss) {
-        Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(cardBg).padding(24.dp)) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Registro manual en construcción ✏️", color = textPrimary)
-                Spacer(modifier = Modifier.height(16.dp))
-                Button(onClick = onDismiss) { Text("Cerrar") }
+        Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(cardBg).border(3.dp, Brush.linearGradient(listOf(PastelPink, PastelPurple)), RoundedCornerShape(28.dp))) {
+            Column(modifier = Modifier.padding(24.dp).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { onDelete(session) }) { Text("🗑️", fontSize = 24.sp) }
+                }
+                val (hours, minutes) = calculateRealSleepTime(session)
+                Text(formatSleepDuration(hours, minutes), fontSize = 52.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF805AD5))
+                Text("Tiempo Total de Sueño", style = MaterialTheme.typography.bodyMedium, color = textPrimary.copy(alpha = 0.7f))
+                Spacer(modifier = Modifier.height(24.dp))
+                val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
+                TimelineEvent(timeFormat.format(session.startTime), "Se durmió", if (session.type == SleepType.SIESTA) "🌤️" else "🌜", PastelBlue, true, session.interruptions.isEmpty() && session.endTime == null, textPrimary)
+                session.interruptions.forEach { interruption ->
+                    TimelineEvent(timeFormat.format(interruption.wokeUpAt), "Despertó", "✨", PastelPink, false, false, textPrimary)
+                    interruption.backToSleepAt?.let { backTime -> TimelineEvent(timeFormat.format(backTime), "Volvió a dormir", "💤", PastelBlue, false, false, textPrimary) }
+                }
+                session.endTime?.let { end -> TimelineEvent(timeFormat.format(end), "Despertó Definitivo", "🏁", PastelPurple, false, true, textPrimary) }
+                Spacer(modifier = Modifier.height(32.dp))
+                Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF805AD5)), shape = RoundedCornerShape(50), modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Cerrar", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp) }
             }
         }
     }
@@ -886,13 +781,13 @@ fun ManualEntryDialog(isDark: Boolean, cardBg: Color, textPrimary: Color, onDism
 
 @Composable
 fun DeleteConfirmationDialog(session: SleepSession, isDark: Boolean, cardBg: Color, textPrimary: Color, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    // (Mismo código de Delete Dialog de tu archivo original)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("⚠️ Confirmar") },
         text = { Text("¿Eliminar este registro?") },
-        confirmButton = { TextButton(onClick = onConfirm) { Text("Eliminar", color = Color.Red) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Eliminar", color = Color(0xFFE53E3E)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar", color = textPrimary) } },
+        containerColor = cardBg
     )
 }
 
@@ -913,6 +808,3 @@ fun TimelineEvent(time: String, title: String, icon: String, color: Color, isFir
         }
     }
 }
-
-// Nota del asistente: Sustituye el cuerpo de ManualEntryDialog y AchievementsDialog por el que ya tenías
-// si los usas habitualmente, los he acortado levemente aquí para que el código compile y sea focalizado en el rediseño.
