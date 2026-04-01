@@ -4,6 +4,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,6 +32,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -48,6 +55,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val repository = FirebaseSleepRepository()
@@ -64,23 +72,20 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// NUEVO COMPONENTE: Botón Estilizado Premium
+// --- COMPONENTES VISUALES ---
+
 @Composable
 fun BabyStyledButton(
-    text: String,
-    subText: String? = null,
-    icon: String? = null,
-    color: Color,
-    textColor: Color,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
+    text: String, subText: String? = null, icon: String? = null,
+    color: Color, textColor: Color, modifier: Modifier = Modifier, onClick: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
     Button(
-        onClick = onClick,
+        onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onClick() },
         colors = ButtonDefaults.buttonColors(containerColor = color),
-        elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp, pressedElevation = 2.dp),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp, pressedElevation = 1.dp),
         shape = RoundedCornerShape(20.dp),
-        modifier = modifier.shadow(6.dp, RoundedCornerShape(20.dp), spotColor = color.copy(alpha = 0.5f))
+        modifier = modifier.shadow(4.dp, RoundedCornerShape(20.dp), spotColor = color.copy(alpha = 0.5f))
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             if (icon != null) Text(icon, fontSize = 24.sp)
@@ -91,18 +96,38 @@ fun BabyStyledButton(
 }
 
 @Composable
+fun MenuIcon(icon: String, label: String, bgColor: Color, textColor: Color, onClick: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onClick() }.padding(4.dp)
+    ) {
+        Box(
+            modifier = Modifier.size(56.dp).clip(CircleShape).background(bgColor).shadow(2.dp, CircleShape),
+            contentAlignment = Alignment.Center
+        ) { Text(icon, fontSize = 24.sp) }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(label, fontSize = 11.sp, color = textColor, fontWeight = FontWeight.Bold)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 fun MainScreen(viewModel: SleepViewModel) {
     val state by viewModel.uiState.collectAsState()
     val isDark = isSystemInDarkTheme()
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     val backgroundBrush = if (isDark) Brush.linearGradient(listOf(Color(0xFF1A1A2E), Color(0xFF16213E)))
     else Brush.linearGradient(listOf(PastelBlue, PastelPurple, PastelPink))
+
     val primaryTextColor = if (isDark) Color(0xFFF7FAFC) else Color(0xFF2D3748)
     val secondaryTextColor = if (isDark) Color(0xFFA0AEC0) else Color(0xFF718096)
     val cardBackgroundColor = if (isDark) Color(0xFF1A202C).copy(alpha = 0.95f) else Color.White.copy(alpha = 0.95f)
 
     var selectedSession by remember { mutableStateOf<SleepSession?>(null) }
-    var sessionToEdit by remember { mutableStateOf<SleepSession?>(null) } // NUEVO: Estado para editar
+    var sessionToEdit by remember { mutableStateOf<SleepSession?>(null) }
     var showAchievements by remember { mutableStateOf(false) }
     var showDiaperDialog by remember { mutableStateOf(false) }
     var selectedDate by remember { mutableStateOf<String?>(null) }
@@ -120,150 +145,246 @@ fun MainScreen(viewModel: SleepViewModel) {
     }
 
     Box(modifier = Modifier.fillMaxSize().background(backgroundBrush)) {
-        Column(modifier = Modifier.fillMaxSize().padding(top = 48.dp, bottom = 24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            // HEADER
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SmallFloatingActionButton(onClick = { showDiaperDialog = true }, containerColor = if (isDark) Color(0xFF2D3748) else Color.White.copy(alpha=0.9f)) { Text("🫧", fontSize = 20.sp) }
-                    SmallFloatingActionButton(onClick = { showDiaperHistory = true }, containerColor = if (isDark) Color(0xFF2D3748) else Color.White.copy(alpha=0.9f)) { Text("📋", fontSize = 20.sp) }
+        Scaffold(
+            containerColor = Color.Transparent,
+            snackbarHost = {
+                SnackbarHost(hostState = snackbarHostState) { data ->
+                    Snackbar(
+                        containerColor = if (isDark) Color(0xFF805AD5) else Color(0xFF9F7AEA).copy(alpha = 0.95f),
+                        contentColor = Color.White, shape = RoundedCornerShape(24.dp),
+                        modifier = Modifier.padding(horizontal = 24.dp).padding(bottom = 16.dp)
+                    ) { Text(data.visuals.message, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SmallFloatingActionButton(onClick = { showManualEntry = true }, containerColor = if (isDark) Color(0xFF2D3748) else Color.White.copy(alpha=0.9f)) { Text("📝", fontSize = 20.sp) }
-                    SmallFloatingActionButton(onClick = { showAchievements = true }, containerColor = if (isDark) Color(0xFF2D3748) else Color.White.copy(alpha=0.9f)) { Icon(Icons.Default.Star, "Logros", tint = Color(0xFFECC94B)) }
+            },
+            bottomBar = {
+                Surface(
+                    color = cardBackgroundColor,
+                    shadowElevation = 16.dp,
+                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp).fillMaxWidth().height(70.dp).navigationBarsPadding()
+                    ) {
+                        if (state.session == null || state.session?.status == SleepStatus.FINALIZADO) {
+                            BabyStyledButton("Siesta", icon="🌤️", color = if(isDark) Color(0xFF4A5568) else PastelCream, textColor = if(isDark) Color.White else Color(0xFF2D3748), modifier = Modifier.weight(1f).fillMaxHeight()) { viewModel.startNap() }
+                            BabyStyledButton("Noche", icon="🌜", color = Color(0xFF805AD5), textColor = Color.White, modifier = Modifier.weight(1f).fillMaxHeight()) { viewModel.startNight() }
+                        } else {
+                            if (state.session?.status == SleepStatus.DURMIENDO) {
+                                BabyStyledButton("¡Despertó! ✨", color = PastelPink, textColor = Color(0xFF2D3748), modifier = Modifier.fillMaxWidth().fillMaxHeight()) { viewModel.wakeUp() }
+                            } else if (state.session?.status == SleepStatus.DESPIERTO) {
+                                BabyStyledButton("Reanudar", "Volvió a dormir", color = PastelBlue, textColor = Color(0xFF2D3748), modifier = Modifier.weight(1f).fillMaxHeight()) { viewModel.backToSleep() }
+                                BabyStyledButton("Finalizar", "Guardar", color = Color(0xFFE53E3E), textColor = Color.White, modifier = Modifier.weight(1f).fillMaxHeight()) {
+                                    viewModel.finishSleep(); scope.launch { snackbarHostState.showSnackbar("✅ Sesión guardada") }
+                                }
+                            }
+                        }
+                    }
                 }
             }
-
-            // TARJETA PRINCIPAL
-            LiquidCard(modifier = Modifier.size(width = 340.dp, height = 240.dp)) {
-                Column(modifier = Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        when (state.session?.status) { SleepStatus.DURMIENDO -> if (state.session?.type == SleepType.SIESTA) "Siesta Activa 🌤️" else "Dulces Sueños 🌜"; SleepStatus.DESPIERTO -> "En Pausa ✨"; else -> "Listo para dormir" },
-                        style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = primaryTextColor
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    state.session?.let { session ->
-                        if (session.status != SleepStatus.FINALIZADO) {
-                            val diff = currentTimeMillis - session.startTime.time
-                            Text("${TimeUnit.MILLISECONDS.toHours(diff)}h ${TimeUnit.MILLISECONDS.toMinutes(diff) % 60}m", fontSize = 52.sp, fontWeight = FontWeight.ExtraBold, color = if (isDark) Color.White else Color(0xFF6B46C1))
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("Desde: ${SimpleDateFormat("hh:mm a", Locale.getDefault()).format(session.startTime)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = secondaryTextColor)
-                        } else { Text("🧸", fontSize = 72.sp); Spacer(modifier = Modifier.height(12.dp)) }
-                    } ?: run { Text("🧸", fontSize = 72.sp); Spacer(modifier = Modifier.height(12.dp)) }
+        ) { paddingValues ->
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().animateContentSize(),
+                contentPadding = PaddingValues(top = 48.dp, bottom = paddingValues.calculateBottomPadding() + 24.dp, start = 24.dp, end = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // 1. MENÚ SUPERIOR
+                item {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        MenuIcon("🫧", "Pañal", cardBackgroundColor, primaryTextColor) { showDiaperDialog = true }
+                        MenuIcon("📋", "Pañales", cardBackgroundColor, primaryTextColor) { showDiaperHistory = true }
+                        MenuIcon("📝", "Manual", cardBackgroundColor, primaryTextColor) { showManualEntry = true }
+                        MenuIcon("🏆", "Logros", cardBackgroundColor, primaryTextColor) { showAchievements = true }
+                    }
                 }
-            }
 
-            // HISTORIAL
-            Column(modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 24.dp)) {
-                Text("Historial de Sueño", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = secondaryTextColor, modifier = Modifier.padding(vertical = 12.dp))
-                if (selectedDate == null) DateListView(state.history, primaryTextColor, secondaryTextColor) { selectedDate = it }
-                else SessionsOfDayView(state.history, selectedDate!!, primaryTextColor, secondaryTextColor, { selectedDate = null }) { selectedSession = it }
-            }
+                // 2. TEMPORIZADOR GIGANTE
+                item {
+                    LiquidCard(modifier = Modifier.size(width = 320.dp, height = 240.dp)) {
+                        Column(modifier = Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                when (state.session?.status) { SleepStatus.DURMIENDO -> if (state.session?.type == SleepType.SIESTA) "Siesta Activa 🌤️" else "Dulces Sueños 🌜"; SleepStatus.DESPIERTO -> "En Pausa ✨"; else -> "Listo para dormir" },
+                                style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = primaryTextColor
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            state.session?.let { session ->
+                                if (session.status != SleepStatus.FINALIZADO) {
+                                    val diff = currentTimeMillis - session.startTime.time
+                                    Text("${TimeUnit.MILLISECONDS.toHours(diff)}h ${TimeUnit.MILLISECONDS.toMinutes(diff) % 60}m", fontSize = 52.sp, fontWeight = FontWeight.ExtraBold, color = if (isDark) Color.White else Color(0xFF6B46C1))
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text("Desde: ${SimpleDateFormat("hh:mm a", Locale.getDefault()).format(session.startTime)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = secondaryTextColor)
+                                } else { Text("🧸", fontSize = 72.sp); Spacer(modifier = Modifier.height(12.dp)) }
+                            } ?: run { Text("🧸", fontSize = 72.sp); Spacer(modifier = Modifier.height(12.dp)) }
+                        }
+                    }
+                }
 
-            // BOTONES PRINCIPALES (USANDO EL NUEVO DISEÑO)
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(80.dp)) {
-                if (state.session == null || state.session?.status == SleepStatus.FINALIZADO) {
-                    BabyStyledButton("Siesta", icon="🌤️", color = if(isDark) Color(0xFF4A5568) else PastelCream, textColor = if(isDark) Color.White else Color(0xFF2D3748), modifier = Modifier.weight(1f).fillMaxHeight()) { viewModel.startNap() }
-                    BabyStyledButton("Noche", icon="🌜", color = Color(0xFF805AD5), textColor = Color.White, modifier = Modifier.weight(1f).fillMaxHeight()) { viewModel.startNight() }
+                // 3. GRÁFICA SEMANAL (NUEVO DISEÑO PREMIUM)
+                item {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text("Tendencia Semanal", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = secondaryTextColor, modifier = Modifier.padding(bottom = 8.dp))
+                        LiquidCard(modifier = Modifier.fillMaxWidth().height(220.dp)) {
+                            WeeklySleepGraph(history = state.history, primaryTextColor = primaryTextColor, secondaryTextColor = secondaryTextColor, barColor = Color(0xFF805AD5), isDark = isDark)
+                        }
+                    }
+                }
+
+                // 4. HISTORIAL DE SUEÑO
+                item {
+                    Text("Historial de Sueño", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = secondaryTextColor, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
+                }
+
+                if (selectedDate == null) {
+                    val groupedByDate = state.history.filter { it.status == SleepStatus.FINALIZADO }.groupBy { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(it.startTime) }.toSortedMap(compareByDescending { it })
+                    if (groupedByDate.isEmpty()) {
+                        item { Text("Aún no hay registros.", color = secondaryTextColor) }
+                    } else {
+                        items(groupedByDate.keys.toList()) { dateKey ->
+                            val sessions = groupedByDate[dateKey] ?: emptyList()
+                            var totalMillis = 0L
+                            sessions.forEach { val (h, m) = calculateRealSleepTime(it); totalMillis += (h * 60L + m) * 60000L }
+                            LiquidCard(modifier = Modifier.fillMaxWidth().clickable { selectedDate = dateKey }) {
+                                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(SimpleDateFormat("EEEE dd MMMM", Locale("es", "ES")).format(sessions.first().startTime).replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = primaryTextColor)
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text("☁️ ${totalMillis / 3600000L}h ${(totalMillis % 3600000L) / 60000L}m", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = Color(0xFF805AD5))
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Text("📊 ${sessions.size} regs", style = MaterialTheme.typography.bodySmall, color = secondaryTextColor)
+                                        }
+                                    }
+                                    Text("➜", fontSize = 20.sp, color = secondaryTextColor)
+                                }
+                            }
+                        }
+                    }
                 } else {
-                    if (state.session?.status == SleepStatus.DURMIENDO) {
-                        BabyStyledButton("¡Despertó! ✨", color = PastelPink, textColor = Color(0xFF2D3748), modifier = Modifier.fillMaxWidth().fillMaxHeight()) { viewModel.wakeUp() }
-                    } else if (state.session?.status == SleepStatus.DESPIERTO) {
-                        BabyStyledButton("Reanudar", "Volvió a dormir", color = PastelBlue, textColor = Color(0xFF2D3748), modifier = Modifier.weight(1f).fillMaxHeight()) { viewModel.backToSleep() }
-                        BabyStyledButton("Finalizar", "Guardar", color = Color(0xFFE53E3E), textColor = Color.White, modifier = Modifier.weight(1f).fillMaxHeight()) { viewModel.finishSleep() }
+                    item {
+                        LiquidCard(modifier = Modifier.fillMaxWidth().clickable { selectedDate = null }) {
+                            Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text("⬅", fontSize = 20.sp); Spacer(modifier = Modifier.width(12.dp)); Text("Volver", fontWeight = FontWeight.Bold, color = primaryTextColor) }
+                        }
+                    }
+                    val sessions = state.history.filter { it.status == SleepStatus.FINALIZADO && SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(it.startTime) == selectedDate }.sortedByDescending { it.startTime }
+                    items(sessions) { session ->
+                        LiquidCard(modifier = Modifier.fillMaxWidth().clickable { selectedSession = session }) {
+                            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(if (session.type == SleepType.SIESTA) "🌤️" else "🌜", fontSize = 24.sp); Spacer(modifier = Modifier.width(16.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    val endFmt = session.endTime?.let { SimpleDateFormat("hh:mm a", Locale.getDefault()).format(it) } ?: "..."
+                                    Text("${SimpleDateFormat("hh:mm a", Locale.getDefault()).format(session.startTime)} - $endFmt", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = primaryTextColor)
+                                    val (hours, minutes) = calculateRealSleepTime(session)
+                                    Text(formatSleepDuration(hours, minutes), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = Color(0xFF805AD5))
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
 
-        // POPUPS
+        // --- DIÁLOGOS Y MODALES ---
         if (selectedSession != null) {
             SessionDetailDialog(selectedSession!!, cardBackgroundColor, primaryTextColor,
-                onDismiss = { selectedSession = null },
-                onDelete = { sessionToDelete = it; showDeleteConfirmation = true },
-                onEdit = { sessionToEdit = it; selectedSession = null } // Abre el dialog de edición
-            )
+                onDismiss = { selectedSession = null }, onDelete = { sessionToDelete = it; showDeleteConfirmation = true }, onEdit = { sessionToEdit = it; selectedSession = null })
         }
 
         if (sessionToEdit != null) {
-            EditSessionDialog(
-                session = sessionToEdit!!, cardBg = cardBackgroundColor, textPrimary = primaryTextColor,
-                onDismiss = { sessionToEdit = null },
-                onSave = { updatedSession -> viewModel.updateSession(updatedSession); sessionToEdit = null }
-            )
+            EditSessionDialog(sessionToEdit!!, cardBackgroundColor, primaryTextColor, onDismiss = { sessionToEdit = null }, onSave = { updatedSession ->
+                viewModel.updateSession(updatedSession); sessionToEdit = null; scope.launch { snackbarHostState.showSnackbar("✏️ Actualizado") }
+            })
         }
 
         if (showAchievements) AchievementsDialog(state.history, isDark, cardBackgroundColor, primaryTextColor) { showAchievements = false }
-        if (showDiaperDialog) DiaperDialog(cardBackgroundColor, primaryTextColor, { showDiaperDialog = false }) { type -> viewModel.addDiaperChange(type); showDiaperDialog = false }
+
+        if (showDiaperDialog) DiaperDialog(cardBackgroundColor, primaryTextColor, onDismiss = { showDiaperDialog = false }) { type ->
+            viewModel.addDiaperChange(type, "", Date()); showDiaperDialog = false; scope.launch { snackbarHostState.showSnackbar("✅ Pañal guardado") }
+        }
+
         if (showDeleteConfirmation && sessionToDelete != null) {
             DeleteConfirmationDialog(sessionToDelete!!, cardBackgroundColor, primaryTextColor,
-                onConfirm = { viewModel.deleteSession(sessionToDelete!!.id); showDeleteConfirmation = false; sessionToDelete = null },
+                onConfirm = { viewModel.deleteSession(sessionToDelete!!.id); showDeleteConfirmation = false; sessionToDelete = null; scope.launch { snackbarHostState.showSnackbar("🗑️ Eliminado") } },
                 onDismiss = { showDeleteConfirmation = false; sessionToDelete = null })
         }
-        if (showManualEntry) ManualEntryDialog(cardBackgroundColor, primaryTextColor, { showManualEntry = false }) { s -> viewModel.addManualSession(s); showManualEntry = false }
+
+        if (showManualEntry) ManualEntryDialog(cardBackgroundColor, primaryTextColor, { showManualEntry = false }) { s ->
+            viewModel.addManualSession(s); showManualEntry = false; scope.launch { snackbarHostState.showSnackbar("✅ Guardado") }
+        }
+
         if (showDiaperHistory) DiaperHistoryDialog(state.diaperChanges, cardBackgroundColor, primaryTextColor, secondaryTextColor, { showDiaperHistory = false }) { id -> viewModel.deleteDiaperChange(id) }
     }
 }
 
 // ==========================================
-// VISTAS DE HISTORIAL (Sin cambios)
+// GRÁFICA DE TENDENCIA SEMANAL (NUEVA UI ANIMADA)
 // ==========================================
 @Composable
-fun DateListView(history: List<SleepSession>, primaryTextColor: Color, secondaryTextColor: Color, onDateClick: (String) -> Unit) {
-    val groupedByDate = history.filter { it.status == SleepStatus.FINALIZADO }.groupBy { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(it.startTime) }.toSortedMap(compareByDescending { it })
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 12.dp)) {
-        items(groupedByDate.keys.toList()) { dateKey ->
-            val sessions = groupedByDate[dateKey] ?: emptyList()
-            var totalMillis = 0L
-            sessions.forEach { val (h, m) = calculateRealSleepTime(it); totalMillis += (h * 60L + m) * 60000L }
-            LiquidCard(modifier = Modifier.fillMaxWidth().clickable { onDateClick(dateKey) }) {
-                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(SimpleDateFormat("EEEE dd MMMM yyyy", Locale("es", "ES")).format(sessions.first().startTime).replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = primaryTextColor)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("☁️ Total: ${totalMillis / 3600000L}h ${(totalMillis % 3600000L) / 60000L}m", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = Color(0xFF805AD5))
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text("📊 ${sessions.size} registros", style = MaterialTheme.typography.bodySmall, color = secondaryTextColor)
-                        }
-                    }
-                    Text("➜", fontSize = 24.sp, color = primaryTextColor)
+fun WeeklySleepGraph(history: List<SleepSession>, primaryTextColor: Color, secondaryTextColor: Color, barColor: Color, isDark: Boolean) {
+    val last7Days = (6 downTo 0).map { i -> val cal = Calendar.getInstance(); cal.add(Calendar.DAY_OF_YEAR, -i); cal.time }
+    val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    val dayFmt = SimpleDateFormat("EEE", Locale("es", "ES"))
+    val grouped = history.filter { it.status == SleepStatus.FINALIZADO }.groupBy { dateFmt.format(it.startTime) }
+
+    val dataPoints = last7Days.map { date ->
+        val sessions = grouped[dateFmt.format(date)] ?: emptyList()
+        var totalMillis = 0L
+        sessions.forEach { val diff = (it.endTime?.time ?: 0L) - it.startTime.time; if(diff > 0) totalMillis += diff }
+        Pair(dayFmt.format(date).replaceFirstChar { it.uppercase() }.take(3), totalMillis / 3600000f)
+    }
+
+    val maxHours = (dataPoints.maxOfOrNull { it.second } ?: 12f).coerceAtLeast(8f)
+    val barGradient = Brush.verticalGradient(colors = listOf(barColor.copy(alpha = 0.6f), barColor))
+
+    Row(modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 16.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Bottom) {
+        dataPoints.forEach { (day, hours) ->
+            val targetHeight = if (maxHours > 0) (hours / maxHours).coerceAtMost(1f) else 0f
+
+            // Animación de la barra al cargar la pantalla
+            val animatedHeight by animateFloatAsState(
+                targetValue = targetHeight.coerceAtLeast(0.01f),
+                animationSpec = tween(durationMillis = 1000, easing = FastOutSlowInEasing),
+                label = "barAnimation"
+            )
+
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom, modifier = Modifier.fillMaxHeight()) {
+                // Etiqueta de horas arriba de la barra
+                if (hours > 0) {
+                    Text(String.format(Locale.US, "%.1f", hours), color = primaryTextColor, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                } else {
+                    Text("-", color = secondaryTextColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Track de la barra (fondo gris/transparente) y relleno de color
+                Box(
+                    modifier = Modifier.width(26.dp).weight(1f).clip(RoundedCornerShape(50))
+                        .background(if (isDark) Color.White.copy(alpha = 0.05f) else Color.Black.copy(alpha = 0.04f)),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight(animatedHeight)
+                            .clip(RoundedCornerShape(50))
+                            .background(if (hours > 0) barGradient else SolidColor(Color.Transparent))
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Etiqueta del día (Lun, Mar, Mié...)
+                Text(day, color = if (hours > 0) primaryTextColor else secondaryTextColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
 }
 
-@Composable
-fun SessionsOfDayView(history: List<SleepSession>, selectedDate: String, primaryTextColor: Color, secondaryTextColor: Color, onBack: () -> Unit, onSessionClick: (SleepSession) -> Unit) {
-    val sessions = history.filter { it.status == SleepStatus.FINALIZADO && SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(it.startTime) == selectedDate }.sortedByDescending { it.startTime }
-    Column {
-        LiquidCard(modifier = Modifier.fillMaxWidth().clickable { onBack() }) {
-            Row(modifier = Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) { Text("⬅", fontSize = 24.sp); Spacer(modifier = Modifier.width(12.dp)); Text("Volver a fechas", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = primaryTextColor) }
-        }
-        Spacer(modifier = Modifier.height(10.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(sessions) { session ->
-                LiquidCard(modifier = Modifier.fillMaxWidth().clickable { onSessionClick(session) }) {
-                    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(if (session.type == SleepType.SIESTA) "🌤️" else "🌜", fontSize = 28.sp); Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            val endFmt = session.endTime?.let { SimpleDateFormat("hh:mm a", Locale.getDefault()).format(it) } ?: "..."
-                            Text("${SimpleDateFormat("hh:mm a", Locale.getDefault()).format(session.startTime)} - $endFmt", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = primaryTextColor)
-                            val (hours, minutes) = calculateRealSleepTime(session)
-                            Text(formatSleepDuration(hours, minutes), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = Color(0xFF805AD5))
-                        }
-                        Text("➜", fontSize = 20.sp, color = primaryTextColor)
-                    }
-                }
-            }
-        }
-    }
-}
-
 // ==========================================
-// EDICIÓN DE SESIÓN (NUEVO) Y ENTRADA MANUAL
+// MODALES (Edición, Manual, Pañales, Logros)
 // ==========================================
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditSessionDialog(session: SleepSession, cardBg: Color, textPrimary: Color, onDismiss: () -> Unit, onSave: (SleepSession) -> Unit) {
@@ -308,10 +429,9 @@ fun EditSessionDialog(session: SleepSession, cardBg: Color, textPrimary: Color, 
             }
         }
     }
-    // Pickers simplificados
-    if (showStartDatePicker) { DatePickerDialog(onDismissRequest = { showStartDatePicker = false }, confirmButton = { TextButton(onClick = { showStartDatePicker = false }) { Text("OK") } }) { /* Picker UI */ } }
+    if (showStartDatePicker) { val dps = rememberDatePickerState(initialSelectedDateMillis = startDate.time); DatePickerDialog(onDismissRequest = { showStartDatePicker = false }, confirmButton = { TextButton(onClick = { dps.selectedDateMillis?.let { startDate = Date(it) }; showStartDatePicker = false }) { Text("OK") } }) { DatePicker(dps) } }
     if (showStartTimePicker) { val tps = rememberTimePickerState(initialHour = Calendar.getInstance().apply{time=startDate}.get(Calendar.HOUR_OF_DAY), initialMinute = Calendar.getInstance().apply{time=startDate}.get(Calendar.MINUTE)); AlertDialog(onDismissRequest = { showStartTimePicker = false }, confirmButton = { TextButton(onClick = { startDate = Calendar.getInstance().apply { time = startDate; set(Calendar.HOUR_OF_DAY, tps.hour); set(Calendar.MINUTE, tps.minute) }.time; showStartTimePicker = false }) { Text("OK") } }, text = { TimePicker(tps) }) }
-    if (showEndDatePicker) { DatePickerDialog(onDismissRequest = { showEndDatePicker = false }, confirmButton = { TextButton(onClick = { showEndDatePicker = false }) { Text("OK") } }) { /* Picker UI */ } }
+    if (showEndDatePicker) { val dps = rememberDatePickerState(initialSelectedDateMillis = endDate.time); DatePickerDialog(onDismissRequest = { showEndDatePicker = false }, confirmButton = { TextButton(onClick = { dps.selectedDateMillis?.let { endDate = Date(it) }; showEndDatePicker = false }) { Text("OK") } }) { DatePicker(dps) } }
     if (showEndTimePicker) { val tps = rememberTimePickerState(initialHour = Calendar.getInstance().apply{time=endDate}.get(Calendar.HOUR_OF_DAY), initialMinute = Calendar.getInstance().apply{time=endDate}.get(Calendar.MINUTE)); AlertDialog(onDismissRequest = { showEndTimePicker = false }, confirmButton = { TextButton(onClick = { endDate = Calendar.getInstance().apply { time = endDate; set(Calendar.HOUR_OF_DAY, tps.hour); set(Calendar.MINUTE, tps.minute) }.time; showEndTimePicker = false }) { Text("OK") } }, text = { TimePicker(tps) }) }
 }
 
@@ -356,11 +476,33 @@ fun ManualEntryDialog(cardBg: Color, textPrimary: Color, onDismiss: () -> Unit, 
 }
 
 @Composable
+fun DiaperDialog(cardBg: Color, textPrimary: Color, onDismiss: () -> Unit, onAddDiaper: (DiaperType) -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(cardBg).border(3.dp, Brush.linearGradient(listOf(PastelBlue, PastelPink)), RoundedCornerShape(28.dp))) {
+            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("¿Qué pasó? 🫧", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = textPrimary)
+                Spacer(modifier = Modifier.height(24.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    BabyStyledButton("💧 Orina", color = PastelBlue, textColor = Color(0xFF2D3748), modifier = Modifier.fillMaxWidth().height(60.dp)) { onAddDiaper(DiaperType.ORINA) }
+                    BabyStyledButton("🤎 Sólido", color = Color(0xFFEDDFD6), textColor = Color(0xFF5C4033), modifier = Modifier.fillMaxWidth().height(60.dp)) { onAddDiaper(DiaperType.POPO) }
+                    BabyStyledButton("💧🤎 Ambos", color = Color(0xFFE9D8FD), textColor = Color(0xFF44337A), modifier = Modifier.fillMaxWidth().height(60.dp)) { onAddDiaper(DiaperType.AMBOS) }
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+                TextButton(onClick = onDismiss) { Text("Cancelar", color = textPrimary) }
+            }
+        }
+    }
+}
+
+// ==========================================
+// RESTO DE FUNCIONES Y DETALLES
+// ==========================================
+
+@Composable
 fun SessionDetailDialog(session: SleepSession, cardBg: Color, textPrimary: Color, onDismiss: () -> Unit, onDelete: (SleepSession) -> Unit, onEdit: (SleepSession) -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
         Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(cardBg).border(3.dp, Brush.linearGradient(listOf(PastelPink, PastelPurple)), RoundedCornerShape(28.dp))) {
             Column(modifier = Modifier.padding(24.dp).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
-                // ICONOS ARRIBA: EDITAR Y ELIMINAR
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { onEdit(session) }) { Text("✏️", fontSize = 20.sp) }
                     IconButton(onClick = { onDelete(session) }) { Text("🗑️", fontSize = 20.sp) }
@@ -383,9 +525,6 @@ fun SessionDetailDialog(session: SleepSession, cardBg: Color, textPrimary: Color
     }
 }
 
-// ==========================================
-// RESTO DE DIALOGOS: Achievements, Diapers, etc (se mantienen como estaban)
-// ==========================================
 @Composable
 fun AchievementsDialog(history: List<SleepSession>, isDark: Boolean, cardBg: Color, textPrimary: Color, onDismiss: () -> Unit) {
     val milestones = remember(history) { checkMilestones(history) }
@@ -408,25 +547,6 @@ fun AchievementsDialog(history: List<SleepSession>, isDark: Boolean, cardBg: Col
                 }
                 Spacer(modifier = Modifier.height(24.dp))
                 BabyStyledButton("Cerrar", color = Color(0xFF805AD5), textColor = Color.White, modifier = Modifier.fillMaxWidth().height(50.dp)) { onDismiss() }
-            }
-        }
-    }
-}
-
-@Composable
-fun DiaperDialog(cardBg: Color, textPrimary: Color, onDismiss: () -> Unit, onAddDiaper: (DiaperType) -> Unit) {
-    Dialog(onDismissRequest = onDismiss) {
-        Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(cardBg).border(3.dp, Brush.linearGradient(listOf(PastelBlue, PastelPink)), RoundedCornerShape(28.dp))) {
-            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("¿Qué pasó? 🫧", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = textPrimary)
-                Spacer(modifier = Modifier.height(24.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    BabyStyledButton("💧 Orina", color = PastelBlue, textColor = Color(0xFF2D3748), modifier = Modifier.fillMaxWidth().height(60.dp)) { onAddDiaper(DiaperType.ORINA) }
-                    BabyStyledButton("🤎 Sólido", color = Color(0xFFEDDFD6), textColor = Color(0xFF5C4033), modifier = Modifier.fillMaxWidth().height(60.dp)) { onAddDiaper(DiaperType.POPO) }
-                    BabyStyledButton("💧🤎 Ambos", color = Color(0xFFE9D8FD), textColor = Color(0xFF44337A), modifier = Modifier.fillMaxWidth().height(60.dp)) { onAddDiaper(DiaperType.AMBOS) }
-                }
-                Spacer(modifier = Modifier.height(24.dp))
-                TextButton(onClick = onDismiss) { Text("Cancelar", color = textPrimary) }
             }
         }
     }
