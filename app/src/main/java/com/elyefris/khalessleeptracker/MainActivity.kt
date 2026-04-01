@@ -84,13 +84,13 @@ fun BabyStyledButton(
         onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onClick() },
         colors = ButtonDefaults.buttonColors(containerColor = color),
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp, pressedElevation = 1.dp),
-        shape = RoundedCornerShape(20.dp),
-        modifier = modifier.shadow(4.dp, RoundedCornerShape(20.dp), spotColor = color.copy(alpha = 0.5f))
+        shape = RoundedCornerShape(18.dp),
+        modifier = modifier.shadow(4.dp, RoundedCornerShape(18.dp), spotColor = color.copy(alpha = 0.4f))
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            if (icon != null) Text(icon, fontSize = 24.sp)
-            Text(text, color = textColor, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            if (subText != null) Text(subText, color = textColor.copy(alpha = 0.7f), fontSize = 12.sp)
+            if (icon != null) Text(icon, fontSize = 22.sp)
+            Text(text, color = textColor, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            if (subText != null) Text(subText, color = textColor.copy(alpha = 0.8f), fontSize = 11.sp)
         }
     }
 }
@@ -103,11 +103,11 @@ fun MenuIcon(icon: String, label: String, bgColor: Color, textColor: Color, onCl
         modifier = Modifier.clickable { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onClick() }.padding(4.dp)
     ) {
         Box(
-            modifier = Modifier.size(56.dp).clip(CircleShape).background(bgColor).shadow(2.dp, CircleShape),
+            modifier = Modifier.size(48.dp).clip(CircleShape).background(bgColor).shadow(2.dp, CircleShape),
             contentAlignment = Alignment.Center
-        ) { Text(icon, fontSize = 24.sp) }
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(label, fontSize = 11.sp, color = textColor, fontWeight = FontWeight.Bold)
+        ) { Text(icon, fontSize = 22.sp) }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(label, fontSize = 10.sp, color = textColor, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -163,8 +163,8 @@ fun MainScreen(viewModel: SleepViewModel) {
                     shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
                 ) {
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp).fillMaxWidth().height(70.dp).navigationBarsPadding()
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp).fillMaxWidth().height(65.dp).navigationBarsPadding()
                     ) {
                         if (state.session == null || state.session?.status == SleepStatus.FINALIZADO) {
                             BabyStyledButton("Siesta", icon="🌤️", color = if(isDark) Color(0xFF4A5568) else PastelCream, textColor = if(isDark) Color.White else Color(0xFF2D3748), modifier = Modifier.weight(1f).fillMaxHeight()) { viewModel.startNap() }
@@ -183,99 +183,120 @@ fun MainScreen(viewModel: SleepViewModel) {
                 }
             }
         ) { paddingValues ->
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().animateContentSize(),
-                contentPadding = PaddingValues(top = 48.dp, bottom = paddingValues.calculateBottomPadding() + 24.dp, start = 24.dp, end = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp),
+            // --- ESTRUCTURA PRINCIPAL DIVIDIDA ---
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(
+                        top = paddingValues.calculateTopPadding() + 24.dp,
+                        bottom = paddingValues.calculateBottomPadding(), // Solo margen para el BottomBar
+                        start = 20.dp,
+                        end = 20.dp
+                    ),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // 1. MENÚ SUPERIOR
-                item {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        MenuIcon("🫧", "Pañal", cardBackgroundColor, primaryTextColor) { showDiaperDialog = true }
-                        MenuIcon("📋", "Pañales", cardBackgroundColor, primaryTextColor) { showDiaperHistory = true }
-                        MenuIcon("📝", "Manual", cardBackgroundColor, primaryTextColor) { showManualEntry = true }
-                        MenuIcon("🏆", "Logros", cardBackgroundColor, primaryTextColor) { showAchievements = true }
+
+                // --- PARTE 1: FIJA (NO SCROLLABLE) ---
+
+                // MENÚ SUPERIOR FIJO
+                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    MenuIcon("🫧", "Pañal", cardBackgroundColor, primaryTextColor) { showDiaperDialog = true }
+                    MenuIcon("📋", "Pañales", cardBackgroundColor, primaryTextColor) { showDiaperHistory = true }
+                    MenuIcon("📝", "Manual", cardBackgroundColor, primaryTextColor) { showManualEntry = true }
+                    MenuIcon("🏆", "Logros", cardBackgroundColor, primaryTextColor) { showAchievements = true }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // TEMPORIZADOR FIJO
+                LiquidCard(modifier = Modifier.fillMaxWidth().height(180.dp)) {
+                    Column(modifier = Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            when (state.session?.status) { SleepStatus.DURMIENDO -> if (state.session?.type == SleepType.SIESTA) "Siesta Activa 🌤️" else "Dulces Sueños 🌜"; SleepStatus.DESPIERTO -> "En Pausa ✨"; else -> "Listo para dormir" },
+                            style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = primaryTextColor
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        state.session?.let { session ->
+                            if (session.status != SleepStatus.FINALIZADO) {
+                                val diff = currentTimeMillis - session.startTime.time
+                                Text("${TimeUnit.MILLISECONDS.toHours(diff)}h ${TimeUnit.MILLISECONDS.toMinutes(diff) % 60}m", fontSize = 48.sp, fontWeight = FontWeight.ExtraBold, color = if (isDark) Color.White else Color(0xFF6B46C1))
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("Desde: ${SimpleDateFormat("hh:mm a", Locale.getDefault()).format(session.startTime)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = secondaryTextColor)
+                            } else { Text("🧸", fontSize = 56.sp); Spacer(modifier = Modifier.height(8.dp)) }
+                        } ?: run { Text("🧸", fontSize = 56.sp); Spacer(modifier = Modifier.height(8.dp)) }
                     }
                 }
 
-                // 2. TEMPORIZADOR GIGANTE
-                item {
-                    LiquidCard(modifier = Modifier.size(width = 320.dp, height = 240.dp)) {
-                        Column(modifier = Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                when (state.session?.status) { SleepStatus.DURMIENDO -> if (state.session?.type == SleepType.SIESTA) "Siesta Activa 🌤️" else "Dulces Sueños 🌜"; SleepStatus.DESPIERTO -> "En Pausa ✨"; else -> "Listo para dormir" },
-                                style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = primaryTextColor
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            state.session?.let { session ->
-                                if (session.status != SleepStatus.FINALIZADO) {
-                                    val diff = currentTimeMillis - session.startTime.time
-                                    Text("${TimeUnit.MILLISECONDS.toHours(diff)}h ${TimeUnit.MILLISECONDS.toMinutes(diff) % 60}m", fontSize = 52.sp, fontWeight = FontWeight.ExtraBold, color = if (isDark) Color.White else Color(0xFF6B46C1))
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text("Desde: ${SimpleDateFormat("hh:mm a", Locale.getDefault()).format(session.startTime)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = secondaryTextColor)
-                                } else { Text("🧸", fontSize = 72.sp); Spacer(modifier = Modifier.height(12.dp)) }
-                            } ?: run { Text("🧸", fontSize = 72.sp); Spacer(modifier = Modifier.height(12.dp)) }
-                        }
-                    }
-                }
+                Spacer(modifier = Modifier.height(24.dp))
 
-                // 3. GRÁFICA SEMANAL (NUEVO DISEÑO PREMIUM)
-                item {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Text("Tendencia Semanal", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = secondaryTextColor, modifier = Modifier.padding(bottom = 8.dp))
-                        LiquidCard(modifier = Modifier.fillMaxWidth().height(220.dp)) {
-                            WeeklySleepGraph(history = state.history, primaryTextColor = primaryTextColor, secondaryTextColor = secondaryTextColor, barColor = Color(0xFF805AD5), isDark = isDark)
-                        }
-                    }
-                }
-
-                // 4. HISTORIAL DE SUEÑO
-                item {
-                    Text("Historial de Sueño", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = secondaryTextColor, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
-                }
-
-                if (selectedDate == null) {
-                    val groupedByDate = state.history.filter { it.status == SleepStatus.FINALIZADO }.groupBy { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(it.startTime) }.toSortedMap(compareByDescending { it })
-                    if (groupedByDate.isEmpty()) {
-                        item { Text("Aún no hay registros.", color = secondaryTextColor) }
-                    } else {
-                        items(groupedByDate.keys.toList()) { dateKey ->
-                            val sessions = groupedByDate[dateKey] ?: emptyList()
-                            var totalMillis = 0L
-                            sessions.forEach { val (h, m) = calculateRealSleepTime(it); totalMillis += (h * 60L + m) * 60000L }
-                            LiquidCard(modifier = Modifier.fillMaxWidth().clickable { selectedDate = dateKey }) {
-                                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(SimpleDateFormat("EEEE dd MMMM", Locale("es", "ES")).format(sessions.first().startTime).replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, color = primaryTextColor)
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text("☁️ ${totalMillis / 3600000L}h ${(totalMillis % 3600000L) / 60000L}m", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = Color(0xFF805AD5))
-                                            Spacer(modifier = Modifier.width(12.dp))
-                                            Text("📊 ${sessions.size} regs", style = MaterialTheme.typography.bodySmall, color = secondaryTextColor)
-                                        }
-                                    }
-                                    Text("➜", fontSize = 20.sp, color = secondaryTextColor)
-                                }
+                // --- PARTE 2: ZONA SCROLLABLE (Gráfica e Historial) ---
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f) // Esto hace que ocupe todo el espacio sobrante debajo del temporizador
+                        .animateContentSize(),
+                    contentPadding = PaddingValues(bottom = 16.dp), // Espacio final antes del botón de siesta
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // GRÁFICA SEMANAL COMPACTA
+                    item {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text("Tendencia Semanal", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = secondaryTextColor, modifier = Modifier.padding(bottom = 6.dp, start = 4.dp))
+                            LiquidCard(modifier = Modifier.fillMaxWidth().height(200.dp)) {
+                                WeeklySleepGraph(history = state.history, primaryTextColor = primaryTextColor, secondaryTextColor = secondaryTextColor, barColor = Color(0xFF805AD5), isDark = isDark)
                             }
                         }
                     }
-                } else {
+
+                    // TÍTULO DEL HISTORIAL
                     item {
-                        LiquidCard(modifier = Modifier.fillMaxWidth().clickable { selectedDate = null }) {
-                            Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text("⬅", fontSize = 20.sp); Spacer(modifier = Modifier.width(12.dp)); Text("Volver", fontWeight = FontWeight.Bold, color = primaryTextColor) }
-                        }
+                        Text("Historial de Sueño", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = secondaryTextColor, modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp, start = 4.dp))
                     }
-                    val sessions = state.history.filter { it.status == SleepStatus.FINALIZADO && SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(it.startTime) == selectedDate }.sortedByDescending { it.startTime }
-                    items(sessions) { session ->
-                        LiquidCard(modifier = Modifier.fillMaxWidth().clickable { selectedSession = session }) {
-                            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text(if (session.type == SleepType.SIESTA) "🌤️" else "🌜", fontSize = 24.sp); Spacer(modifier = Modifier.width(16.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    val endFmt = session.endTime?.let { SimpleDateFormat("hh:mm a", Locale.getDefault()).format(it) } ?: "..."
-                                    Text("${SimpleDateFormat("hh:mm a", Locale.getDefault()).format(session.startTime)} - $endFmt", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, color = primaryTextColor)
-                                    val (hours, minutes) = calculateRealSleepTime(session)
-                                    Text(formatSleepDuration(hours, minutes), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = Color(0xFF805AD5))
+
+                    // LISTA DEL HISTORIAL
+                    if (selectedDate == null) {
+                        val groupedByDate = state.history.filter { it.status == SleepStatus.FINALIZADO }.groupBy { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(it.startTime) }.toSortedMap(compareByDescending { it })
+                        if (groupedByDate.isEmpty()) {
+                            item { Text("Aún no hay registros.", color = secondaryTextColor) }
+                        } else {
+                            items(groupedByDate.keys.toList()) { dateKey ->
+                                val sessions = groupedByDate[dateKey] ?: emptyList()
+                                var totalMillis = 0L
+                                sessions.forEach { val (h, m) = calculateRealSleepTime(it); totalMillis += (h * 60L + m) * 60000L }
+                                LiquidCard(modifier = Modifier.fillMaxWidth().clickable { selectedDate = dateKey }) {
+                                    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(SimpleDateFormat("EEEE dd MMMM", Locale("es", "ES")).format(sessions.first().startTime).replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold, color = primaryTextColor)
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text("☁️ ${totalMillis / 3600000L}h ${(totalMillis % 3600000L) / 60000L}m", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = Color(0xFF805AD5))
+                                                Spacer(modifier = Modifier.width(12.dp))
+                                                Text("📊 ${sessions.size} regs", style = MaterialTheme.typography.labelMedium, color = secondaryTextColor)
+                                            }
+                                        }
+                                        Text("➜", fontSize = 18.sp, color = secondaryTextColor)
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        item {
+                            LiquidCard(modifier = Modifier.fillMaxWidth().clickable { selectedDate = null }) {
+                                Row(modifier = Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) { Text("⬅", fontSize = 18.sp); Spacer(modifier = Modifier.width(8.dp)); Text("Volver", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = primaryTextColor) }
+                            }
+                        }
+                        val sessions = state.history.filter { it.status == SleepStatus.FINALIZADO && SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(it.startTime) == selectedDate }.sortedByDescending { it.startTime }
+                        items(sessions) { session ->
+                            LiquidCard(modifier = Modifier.fillMaxWidth().clickable { selectedSession = session }) {
+                                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(if (session.type == SleepType.SIESTA) "🌤️" else "🌜", fontSize = 22.sp); Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        val endFmt = session.endTime?.let { SimpleDateFormat("hh:mm a", Locale.getDefault()).format(it) } ?: "..."
+                                        Text("${SimpleDateFormat("hh:mm a", Locale.getDefault()).format(session.startTime)} - $endFmt", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = primaryTextColor)
+                                        val (hours, minutes) = calculateRealSleepTime(session)
+                                        Text(formatSleepDuration(hours, minutes), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color(0xFF805AD5))
+                                    }
                                 }
                             }
                         }
@@ -317,7 +338,7 @@ fun MainScreen(viewModel: SleepViewModel) {
 }
 
 // ==========================================
-// GRÁFICA DE TENDENCIA SEMANAL (NUEVA UI ANIMADA)
+// GRÁFICA DE TENDENCIA SEMANAL REPARADA Y ANIMADA
 // ==========================================
 @Composable
 fun WeeklySleepGraph(history: List<SleepSession>, primaryTextColor: Color, secondaryTextColor: Color, barColor: Color, isDark: Boolean) {
@@ -334,49 +355,48 @@ fun WeeklySleepGraph(history: List<SleepSession>, primaryTextColor: Color, secon
     }
 
     val maxHours = (dataPoints.maxOfOrNull { it.second } ?: 12f).coerceAtLeast(8f)
-    val barGradient = Brush.verticalGradient(colors = listOf(barColor.copy(alpha = 0.6f), barColor))
+    val barGradient = Brush.verticalGradient(colors = listOf(barColor.copy(alpha = 0.5f), barColor))
 
-    Row(modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 16.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Bottom) {
+    Row(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.Bottom
+    ) {
         dataPoints.forEach { (day, hours) ->
             val targetHeight = if (maxHours > 0) (hours / maxHours).coerceAtMost(1f) else 0f
 
-            // Animación de la barra al cargar la pantalla
+            var animationPlayed by remember { mutableStateOf(false) }
+            LaunchedEffect(Unit) { animationPlayed = true }
+
             val animatedHeight by animateFloatAsState(
-                targetValue = targetHeight.coerceAtLeast(0.01f),
+                targetValue = if (animationPlayed) targetHeight.coerceAtLeast(0.02f) else 0.02f,
                 animationSpec = tween(durationMillis = 1000, easing = FastOutSlowInEasing),
                 label = "barAnimation"
             )
 
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom, modifier = Modifier.fillMaxHeight()) {
-                // Etiqueta de horas arriba de la barra
                 if (hours > 0) {
-                    Text(String.format(Locale.US, "%.1f", hours), color = primaryTextColor, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(String.format(Locale.US, "%.1f", hours), color = primaryTextColor, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
                 } else {
-                    Text("-", color = secondaryTextColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("-", color = secondaryTextColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Track de la barra (fondo gris/transparente) y relleno de color
                 Box(
-                    modifier = Modifier.width(26.dp).weight(1f).clip(RoundedCornerShape(50))
+                    modifier = Modifier.width(16.dp).weight(1f).clip(RoundedCornerShape(50))
                         .background(if (isDark) Color.White.copy(alpha = 0.05f) else Color.Black.copy(alpha = 0.04f)),
                     contentAlignment = Alignment.BottomCenter
                 ) {
-
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight(animatedHeight)
-                            .clip(RoundedCornerShape(50))
+                        modifier = Modifier.fillMaxWidth().fillMaxHeight(animatedHeight).clip(RoundedCornerShape(50))
                             .background(if (hours > 0) barGradient else SolidColor(Color.Transparent))
                     )
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Etiqueta del día (Lun, Mar, Mié...)
-                Text(day, color = if (hours > 0) primaryTextColor else secondaryTextColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(day, color = if (hours > 0) primaryTextColor else secondaryTextColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
