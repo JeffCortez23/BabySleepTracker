@@ -1,8 +1,17 @@
 package com.elyefris.khalessleeptracker
 
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -34,6 +43,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -54,8 +64,10 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     private val repository = FirebaseSleepRepository()
@@ -118,6 +130,7 @@ fun MainScreen(viewModel: SleepViewModel) {
     val isDark = isSystemInDarkTheme()
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
 
     val backgroundBrush = if (isDark) Brush.linearGradient(listOf(Color(0xFF1A1A2E), Color(0xFF16213E)))
     else Brush.linearGradient(listOf(PastelBlue, PastelPurple, PastelPink))
@@ -135,12 +148,121 @@ fun MainScreen(viewModel: SleepViewModel) {
     var sessionToDelete by remember { mutableStateOf<SleepSession?>(null) }
     var showManualEntry by remember { mutableStateOf(false) }
     var showDiaperHistory by remember { mutableStateOf(false) }
+    var showExportDialog by remember { mutableStateOf(false) }
 
     var currentTimeMillis by remember { mutableStateOf(System.currentTimeMillis()) }
 
-    LaunchedEffect(state.session?.status) {
+    // --- EFECTO SINCRONIZADO CON EL WIDGET ---
+    LaunchedEffect(state.session) {
+        // 1. Guardar datos en la memoria para que el Widget los lea
+        val prefs = context.getSharedPreferences("BabySleepPrefs", Context.MODE_PRIVATE)
+        val editor = prefs.edit()
+
+        if (state.session != null && state.session?.status != SleepStatus.FINALIZADO) {
+            editor.putBoolean("is_sleeping", true)
+            editor.putLong("start_time", state.session!!.startTime.time)
+            editor.putString("sleep_type", state.session!!.type.name)
+        } else {
+            editor.putBoolean("is_sleeping", false)
+        }
+        editor.apply()
+
+        // 2. Mandar un aviso a Android para que repinte el Widget inmediatamente
+        val intent = Intent(context, BabySleepWidget::class.java).apply {
+            action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
+        }
+        val ids = AppWidgetManager.getInstance(context).getAppWidgetIds(ComponentName(context, BabySleepWidget::class.java))
+        intent.putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
+        context.sendBroadcast(intent)
+
+        // 3. Reloj interno de la App (se actualiza cada minuto en UI)
         if (state.session?.status == SleepStatus.DURMIENDO || state.session?.status == SleepStatus.DESPIERTO) {
-            while (true) { currentTimeMillis = System.currentTimeMillis(); delay(60000L) }
+            while (true) {
+                currentTimeMillis = System.currentTimeMillis()
+                delay(60000L)
+            }
+        }
+    }
+
+    // --- LANZADORES DE EXPORTACIÓN ---
+    val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                        val writer = outputStream.bufferedWriter()
+                        val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                        val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
+
+                        writer.write("--- REPORTE DE SUEÑO ---\nFecha,Tipo,Inicio,Fin,Duracion (minutos)\n")
+                        state.history.filter { it.status == SleepStatus.FINALIZADO }.forEach { s ->
+                            val start = timeFmt.format(s.startTime)
+                            val end = s.endTime?.let { timeFmt.format(it) } ?: "..."
+                            val duration = s.endTime?.let { TimeUnit.MILLISECONDS.toMinutes(it.time - s.startTime.time) } ?: 0
+                            writer.write("${dateFmt.format(s.startTime)},${s.type.name},$start,$end,$duration\n")
+                        }
+                        writer.write("\n--- REPORTE DE PAÑALES ---\nFecha,Hora,Tipo\n")
+                        state.diaperChanges.forEach { d -> writer.write("${dateFmt.format(d.timestamp)},${timeFmt.format(d.timestamp)},${d.type.name}\n") }
+                        writer.flush()
+                    }
+                    withContext(Dispatchers.Main) { snackbarHostState.showSnackbar("✅ CSV exportado con éxito") }
+                } catch (e: Exception) { withContext(Dispatchers.Main) { snackbarHostState.showSnackbar("❌ Error al exportar") } }
+            }
+        }
+    }
+
+    val pdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                        val pdfDocument = PdfDocument()
+                        val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create()
+                        var page = pdfDocument.startPage(pageInfo)
+                        var canvas = page.canvas
+                        val paint = Paint().apply { textSize = 14f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL) }
+                        val titlePaint = Paint().apply { textSize = 20f; typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD) }
+                        val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                        val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
+
+                        var yPosition = 50f
+                        canvas.drawText("Reporte Clínico de Sueño y Pañales", 50f, yPosition, titlePaint)
+                        yPosition += 40f
+
+                        canvas.drawText("--- HISTORIAL DE SUEÑO ---", 50f, yPosition, titlePaint)
+                        yPosition += 30f
+                        state.history.filter { it.status == SleepStatus.FINALIZADO }.forEach { s ->
+                            if (yPosition > 800f) {
+                                pdfDocument.finishPage(page); page = pdfDocument.startPage(pageInfo); canvas = page.canvas; yPosition = 50f
+                            }
+                            val start = timeFmt.format(s.startTime)
+                            val end = s.endTime?.let { timeFmt.format(it) } ?: "..."
+                            val duration = s.endTime?.let { TimeUnit.MILLISECONDS.toMinutes(it.time - s.startTime.time) } ?: 0
+                            val typeStr = if (s.type == SleepType.SIESTA) "Siesta" else "Noche"
+                            canvas.drawText("${dateFmt.format(s.startTime)} | $typeStr | $start - $end | ${duration} min", 50f, yPosition, paint)
+                            yPosition += 25f
+                        }
+
+                        yPosition += 20f
+                        if (yPosition > 780f) { pdfDocument.finishPage(page); page = pdfDocument.startPage(pageInfo); canvas = page.canvas; yPosition = 50f }
+
+                        canvas.drawText("--- HISTORIAL DE PAÑALES ---", 50f, yPosition, titlePaint)
+                        yPosition += 30f
+                        state.diaperChanges.forEach { d ->
+                            if (yPosition > 800f) {
+                                pdfDocument.finishPage(page); page = pdfDocument.startPage(pageInfo); canvas = page.canvas; yPosition = 50f
+                            }
+                            val typeStr = when(d.type) { DiaperType.ORINA -> "Orina"; DiaperType.POPO -> "Sólido"; DiaperType.AMBOS -> "Ambos" }
+                            canvas.drawText("${dateFmt.format(d.timestamp)} | ${timeFmt.format(d.timestamp)} | $typeStr", 50f, yPosition, paint)
+                            yPosition += 25f
+                        }
+                        pdfDocument.finishPage(page)
+                        pdfDocument.writeTo(outputStream)
+                        pdfDocument.close()
+                    }
+                    withContext(Dispatchers.Main) { snackbarHostState.showSnackbar("✅ PDF exportado con éxito") }
+                } catch (e: Exception) { withContext(Dispatchers.Main) { snackbarHostState.showSnackbar("❌ Error al exportar PDF") } }
+            }
         }
     }
 
@@ -183,27 +305,19 @@ fun MainScreen(viewModel: SleepViewModel) {
                 }
             }
         ) { paddingValues ->
-            // --- ESTRUCTURA PRINCIPAL DIVIDIDA ---
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(
-                        top = paddingValues.calculateTopPadding() + 24.dp,
-                        bottom = paddingValues.calculateBottomPadding(), // Solo margen para el BottomBar
-                        start = 20.dp,
-                        end = 20.dp
-                    ),
+                    .padding(top = paddingValues.calculateTopPadding() + 24.dp, bottom = paddingValues.calculateBottomPadding(), start = 20.dp, end = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-
-                // --- PARTE 1: FIJA (NO SCROLLABLE) ---
-
                 // MENÚ SUPERIOR FIJO
-                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                     MenuIcon("🫧", "Pañal", cardBackgroundColor, primaryTextColor) { showDiaperDialog = true }
                     MenuIcon("📋", "Pañales", cardBackgroundColor, primaryTextColor) { showDiaperHistory = true }
                     MenuIcon("📝", "Manual", cardBackgroundColor, primaryTextColor) { showManualEntry = true }
                     MenuIcon("🏆", "Logros", cardBackgroundColor, primaryTextColor) { showAchievements = true }
+                    MenuIcon("📄", "Exportar", cardBackgroundColor, primaryTextColor) { showExportDialog = true }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -229,17 +343,13 @@ fun MainScreen(viewModel: SleepViewModel) {
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // --- PARTE 2: ZONA SCROLLABLE (Gráfica e Historial) ---
+                // ZONA SCROLLABLE (Gráfica e Historial)
                 LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f) // Esto hace que ocupe todo el espacio sobrante debajo del temporizador
-                        .animateContentSize(),
-                    contentPadding = PaddingValues(bottom = 16.dp), // Espacio final antes del botón de siesta
+                    modifier = Modifier.fillMaxWidth().weight(1f).animateContentSize(),
+                    contentPadding = PaddingValues(bottom = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // GRÁFICA SEMANAL COMPACTA
                     item {
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Text("Tendencia Semanal", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = secondaryTextColor, modifier = Modifier.padding(bottom = 6.dp, start = 4.dp))
@@ -249,12 +359,8 @@ fun MainScreen(viewModel: SleepViewModel) {
                         }
                     }
 
-                    // TÍTULO DEL HISTORIAL
-                    item {
-                        Text("Historial de Sueño", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = secondaryTextColor, modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp, start = 4.dp))
-                    }
+                    item { Text("Historial de Sueño", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = secondaryTextColor, modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp, start = 4.dp)) }
 
-                    // LISTA DEL HISTORIAL
                     if (selectedDate == null) {
                         val groupedByDate = state.history.filter { it.status == SleepStatus.FINALIZADO }.groupBy { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(it.startTime) }.toSortedMap(compareByDescending { it })
                         if (groupedByDate.isEmpty()) {
@@ -306,6 +412,26 @@ fun MainScreen(viewModel: SleepViewModel) {
         }
 
         // --- DIÁLOGOS Y MODALES ---
+
+        if (showExportDialog) {
+            AlertDialog(
+                onDismissRequest = { showExportDialog = false },
+                containerColor = cardBackgroundColor,
+                title = { Text("Exportar Reporte", fontWeight = FontWeight.Bold, color = primaryTextColor) },
+                text = { Text("¿En qué formato deseas exportar los datos para tu pediatra?", color = secondaryTextColor) },
+                confirmButton = {
+                    Button(onClick = { showExportDialog = false; pdfLauncher.launch("Reporte_Bebe.pdf") }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF805AD5))) {
+                        Text("PDF", color = Color.White)
+                    }
+                },
+                dismissButton = {
+                    OutlinedButton(onClick = { showExportDialog = false; csvLauncher.launch("Reporte_Bebe.csv") }) {
+                        Text("CSV (Excel)", color = primaryTextColor)
+                    }
+                }
+            )
+        }
+
         if (selectedSession != null) {
             SessionDetailDialog(selectedSession!!, cardBackgroundColor, primaryTextColor,
                 onDismiss = { selectedSession = null }, onDelete = { sessionToDelete = it; showDeleteConfirmation = true }, onEdit = { sessionToEdit = it; selectedSession = null })
@@ -338,7 +464,7 @@ fun MainScreen(viewModel: SleepViewModel) {
 }
 
 // ==========================================
-// GRÁFICA DE TENDENCIA SEMANAL REPARADA Y ANIMADA
+// GRÁFICA DE TENDENCIA SEMANAL
 // ==========================================
 @Composable
 fun WeeklySleepGraph(history: List<SleepSession>, primaryTextColor: Color, secondaryTextColor: Color, barColor: Color, isDark: Boolean) {
@@ -364,38 +490,22 @@ fun WeeklySleepGraph(history: List<SleepSession>, primaryTextColor: Color, secon
     ) {
         dataPoints.forEach { (day, hours) ->
             val targetHeight = if (maxHours > 0) (hours / maxHours).coerceAtMost(1f) else 0f
-
             var animationPlayed by remember { mutableStateOf(false) }
             LaunchedEffect(Unit) { animationPlayed = true }
 
             val animatedHeight by animateFloatAsState(
                 targetValue = if (animationPlayed) targetHeight.coerceAtLeast(0.02f) else 0.02f,
-                animationSpec = tween(durationMillis = 1000, easing = FastOutSlowInEasing),
-                label = "barAnimation"
+                animationSpec = tween(durationMillis = 1000, easing = FastOutSlowInEasing), label = "barAnimation"
             )
 
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Bottom, modifier = Modifier.fillMaxHeight()) {
-                if (hours > 0) {
-                    Text(String.format(Locale.US, "%.1f", hours), color = primaryTextColor, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
-                } else {
-                    Text("-", color = secondaryTextColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                }
-
+                if (hours > 0) Text(String.format(Locale.US, "%.1f", hours), color = primaryTextColor, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+                else Text("-", color = secondaryTextColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.dp))
-
-                Box(
-                    modifier = Modifier.width(16.dp).weight(1f).clip(RoundedCornerShape(50))
-                        .background(if (isDark) Color.White.copy(alpha = 0.05f) else Color.Black.copy(alpha = 0.04f)),
-                    contentAlignment = Alignment.BottomCenter
-                ) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().fillMaxHeight(animatedHeight).clip(RoundedCornerShape(50))
-                            .background(if (hours > 0) barGradient else SolidColor(Color.Transparent))
-                    )
+                Box(modifier = Modifier.width(16.dp).weight(1f).clip(RoundedCornerShape(50)).background(if (isDark) Color.White.copy(alpha = 0.05f) else Color.Black.copy(alpha = 0.04f)), contentAlignment = Alignment.BottomCenter) {
+                    Box(modifier = Modifier.fillMaxWidth().fillMaxHeight(animatedHeight).clip(RoundedCornerShape(50)).background(if (hours > 0) barGradient else SolidColor(Color.Transparent)))
                 }
-
                 Spacer(modifier = Modifier.height(8.dp))
-
                 Text(day, color = if (hours > 0) primaryTextColor else secondaryTextColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         }
@@ -411,12 +521,10 @@ fun EditSessionDialog(session: SleepSession, cardBg: Color, textPrimary: Color, 
     var selectedType by remember { mutableStateOf(session.type) }
     var startDate by remember { mutableStateOf(session.startTime) }
     var endDate by remember { mutableStateOf(session.endTime ?: Date()) }
-
     var showStartDatePicker by remember { mutableStateOf(false) }
     var showStartTimePicker by remember { mutableStateOf(false) }
     var showEndDatePicker by remember { mutableStateOf(false) }
     var showEndTimePicker by remember { mutableStateOf(false) }
-
     val dateFormat = SimpleDateFormat("EEE dd MMM yyyy", Locale("es", "ES"))
     val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
 
@@ -461,10 +569,8 @@ fun ManualEntryDialog(cardBg: Color, textPrimary: Color, onDismiss: () -> Unit, 
     var selectedType by remember { mutableStateOf(SleepType.NOCHE) }
     var startDate by remember { mutableStateOf(Date(System.currentTimeMillis() - 8 * 3600000)) }
     var endDate by remember { mutableStateOf(Date()) }
-
     var showStartTimePicker by remember { mutableStateOf(false) }
     var showEndTimePicker by remember { mutableStateOf(false) }
-
     val dateFormat = SimpleDateFormat("EEE dd MMM", Locale("es", "ES"))
     val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
 
